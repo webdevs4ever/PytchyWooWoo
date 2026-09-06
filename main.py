@@ -25,41 +25,57 @@ from sources.splits import SplitsUnavailable, fetch_split
 from sources.weather import WeatherUnavailable, fetch_forecast
 
 def build_demo_slates() -> list[PlayerSlate]:
-    """A small hand-built slate, kicking off inside the NWS forecast window.
+    """A hand-built slate, kicking off inside the NWS forecast window.
 
-    Splits and weather are attached separately by the enrich_* functions.
+    Stands in for a real schedule source. Splits, weather, rosters, and pricing
+    are attached separately by the enrich_* functions.
     """
     kickoff = datetime.now(timezone.utc) + timedelta(days=3)
 
-    buf_at_kc = Game(
-        game_id="2026-W1-BUF-KC",
-        home_team="KC",
-        away_team="BUF",
-        kickoff=kickoff,
-        venue=config.STADIUMS["KC"],
-    )
-    bal_at_det = Game(
-        game_id="2026-W1-BAL-DET",
-        home_team="DET",
-        away_team="BAL",
-        kickoff=kickoff,
-        venue=config.STADIUMS["DET"],
-    )
+    def game(game_id: str, home: str, away: str) -> Game:
+        return Game(
+            game_id=game_id,
+            home_team=home,
+            away_team=away,
+            kickoff=kickoff,
+            venue=config.STADIUMS[home],
+        )
+
+    buf_at_kc = game("2026-W1-BUF-KC", "KC", "BUF")
+    bal_at_det = game("2026-W1-BAL-DET", "DET", "BAL")
+    dal_at_phi = game("2026-W1-DAL-PHI", "PHI", "DAL")
+    sf_at_gb = game("2026-W1-SF-GB", "GB", "SF")
+
+    roster = [
+        ("mahomes", "Patrick Mahomes", Position.QB, "KC", buf_at_kc),
+        ("allen", "Josh Allen", Position.QB, "BUF", buf_at_kc),
+        ("stbrown", "Amon-Ra St. Brown", Position.WR, "DET", bal_at_det),
+        ("tucker", "Justin Tucker", Position.K, "BAL", bal_at_det),
+        ("hurts", "Jalen Hurts", Position.QB, "PHI", dal_at_phi),
+        ("lamb", "CeeDee Lamb", Position.WR, "DAL", dal_at_phi),
+        ("mccaffrey", "Christian McCaffrey", Position.RB, "SF", sf_at_gb),
+        ("love", "Jordan Love", Position.QB, "GB", sf_at_gb),
+    ]
 
     return [
-        PlayerSlate(
-            player=Player("mahomes", "Patrick Mahomes", Position.QB, "KC"),
-            game=buf_at_kc,
-        ),
-        PlayerSlate(
-            player=Player("allen", "Josh Allen", Position.QB, "BUF"),
-            game=buf_at_kc,
-        ),
-        PlayerSlate(
-            player=Player("tucker", "Justin Tucker", Position.K, "BAL"),
-            game=bal_at_det,
-        ),
+        PlayerSlate(player=Player(pid, name, pos, team), game=g)
+        for pid, name, pos, team, g in roster
     ]
+
+
+def enrich_with_rosters(slates: list[PlayerSlate], quiet: bool = False) -> None:
+    """Attach jersey numbers from the roster feed, in place."""
+    try:
+        book = get_roster_book()
+    except RostersUnavailable as exc:
+        if not quiet:
+            print(f"  ! rosters unavailable: {exc}", file=sys.stderr)
+        return
+
+    for slate in slates:
+        entry = book.entry_for(slate.player.name, slate.player.team)
+        if entry and entry.jersey_number:
+            slate.player = replace(slate.player, number=entry.jersey_number)
 
 
 def enrich_with_weather(slates: list[PlayerSlate], quiet: bool = False) -> None:
@@ -76,21 +92,6 @@ def enrich_with_weather(slates: list[PlayerSlate], quiet: bool = False) -> None:
                     print(f"  ! weather unavailable for {slate.game}: {exc}", file=sys.stderr)
                 cache[game_id] = None
         slate.weather = cache[game_id]
-
-
-def enrich_with_rosters(slates: list[PlayerSlate], quiet: bool = False) -> None:
-    """Attach jersey numbers from the roster feed, in place."""
-    try:
-        book = get_roster_book()
-    except RostersUnavailable as exc:
-        if not quiet:
-            print(f"  ! rosters unavailable: {exc}", file=sys.stderr)
-        return
-
-    for slate in slates:
-        entry = book.entry_for(slate.player.name, slate.player.team)
-        if entry and entry.jersey_number:
-            slate.player = replace(slate.player, number=entry.jersey_number)
 
 
 def opponent_of(slate: PlayerSlate) -> str:

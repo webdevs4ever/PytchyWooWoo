@@ -29,6 +29,7 @@ Output is a CLI report today. A dashboard is planned (see below).
 | `qa.py` | Data-quality validation — `Issue`, `QAReport`, `validate()` |
 | `manager.py` | Versioned scoring rules and the dashboard view model |
 | `developer.py` | Release gates — secret scan, imports, smoke test — plus commit/push |
+| `dashboard.py` | HTML renderer for the view model — **implemented** |
 | `overrides.py` | Manual corrections over upstream data — **read side only** |
 | `admin.py` | Admin console — the sole write path for corrections |
 | `overrides.json` | The corrections themselves, with an audit log |
@@ -260,10 +261,22 @@ A player-card grid replacing the CLI printout: dark background, orange-bordered
 cards, circular gradient avatar with initials, name, and number. Design is
 established; the reference mockup uses NBA players and will be converted to NFL.
 
-The data contract already exists — `manager.build_view()` returns exactly the
-shape the cards need: `initials`, `number`, `accent`, pricing, flags, and
-per-player QA issues. Jersey numbers now come from `sources/rosters.py`. Only the
-rendering layer remains.
+Built as `dashboard.py` — `python dashboard.py -o dashboard.html` renders the
+view model to one self-contained file. No framework, no external assets.
+
+Presentation lives in the renderer; the view model stays a plain data contract,
+so a different front end can consume the same payload without touching it.
+
+Design notes carried from the reference mockup: near-black ground, card edge
+coloured by worst flag severity, circular gradient avatar with a gold ring and
+initials, condensed uppercase names, large jersey number in brand orange. Two
+deliberate departures — the card carries flags, per-platform pricing, and QA
+issues the mockup had no room for; and severity drives the card edge, so the
+orange border means something rather than being decorative.
+
+**Known deviation:** the mockup's condensed display face is not embedded. Font
+CDNs are blocked in the publish target and no licensed file is vendored, so the
+page uses a heavy system stack with tight tracking. Close in feel, not identical.
 
 ## Build order
 
@@ -274,7 +287,7 @@ rendering layer remains.
 5. ~~`sources/odds.py`~~ — done
 6. ~~QA validation (`qa.py`)~~ — done
 7. ~~Developer and Manager modules~~ — done
-8. Dashboard — the card grid, consuming `manager.build_view()`
+8. ~~Dashboard — the card grid, consuming `manager.build_view()`~~ — done
 
 ## Known gaps
 

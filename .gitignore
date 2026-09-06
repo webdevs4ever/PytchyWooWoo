@@ -15,3 +15,6 @@ venv/
 
 # Weekly salary exports (week-specific, go stale immediately)
 salaries/*.csv
+
+# Generated dashboard output
+dashboard.html

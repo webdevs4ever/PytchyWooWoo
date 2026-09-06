@@ -178,10 +178,11 @@ def serialize(overrides: Overrides) -> dict:
 def validate(overrides: Overrides | None = None) -> list:
     """Compare corrections against upstream and report ones worth revisiting.
 
-    The important case is a redundant override: upstream has since been fixed,
-    so the correction now restates what the feed already says. It is invisible
-    until the feed changes again, at which point it silently overrides a correct
-    value with a stale one.
+    This never changes what a correction does — corrections are authoritative
+    and always win. It only surfaces ones worth a second look, chiefly the
+    redundant case: upstream has since been fixed, so the correction restates
+    what the feed already says. Harmless today, but it keeps applying, so if the
+    feed changes again it will quietly override the new value with a stale one.
     """
     import qa
 
@@ -234,10 +235,11 @@ def validate(overrides: Overrides | None = None) -> list:
         if redundant:
             issues.append(
                 qa.Issue(
-                    qa.IssueLevel.WARNING,
+                    qa.IssueLevel.NOTICE,
                     "override.redundant",
-                    f"upstream now agrees on {', '.join(redundant)} — "
-                    "this correction is obsolete and should be removed",
+                    f"upstream now agrees on {', '.join(redundant)}; "
+                    "this correction is currently a no-op, but will keep applying "
+                    "if the feed changes again",
                     subject,
                 )
             )

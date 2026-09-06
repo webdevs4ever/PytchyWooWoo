@@ -1,6 +1,73 @@
 {
   "version": 1,
-  "updated_at": "",
+  "updated_at": "2026-09-06T02:46:46+00:00",
   "players": {},
-  "history": []
+  "history": [
+    {
+      "at": "2026-09-06T02:46:08+00:00",
+      "by": "rasfreem",
+      "action": "set",
+      "key": "justintucker",
+      "detail": {
+        "display_name": "Justin Tucker",
+        "jersey_number": 9,
+        "team": "BAL",
+        "position": "K",
+        "status": "ACT"
+      }
+    },
+    {
+      "at": "2026-09-06T02:46:08+00:00",
+      "by": "rasfreem",
+      "action": "set",
+      "key": "aamarisbrown",
+      "detail": {
+        "display_name": "Aamaris Brown",
+        "jersey_number": 42
+      }
+    },
+    {
+      "at": "2026-09-06T02:46:09+00:00",
+      "by": "rasfreem",
+      "action": "set",
+      "key": "patrickmahomes",
+      "detail": {
+        "display_name": "Patrick Mahomes",
+        "team": "XXX"
+      }
+    },
+    {
+      "at": "2026-09-06T02:46:45+00:00",
+      "by": "rasfreem",
+      "action": "remove",
+      "key": "justintucker",
+      "detail": {
+        "jersey_number": 9,
+        "team": "BAL",
+        "display_name": "Justin Tucker",
+        "status": "ACT",
+        "position": "K"
+      }
+    },
+    {
+      "at": "2026-09-06T02:46:46+00:00",
+      "by": "rasfreem",
+      "action": "remove",
+      "key": "aamarisbrown",
+      "detail": {
+        "jersey_number": 42,
+        "display_name": "Aamaris Brown"
+      }
+    },
+    {
+      "at": "2026-09-06T02:46:46+00:00",
+      "by": "rasfreem",
+      "action": "remove",
+      "key": "patrickmahomes",
+      "detail": {
+        "team": "XXX",
+        "display_name": "Patrick Mahomes"
+      }
+    }
+  ]
 }

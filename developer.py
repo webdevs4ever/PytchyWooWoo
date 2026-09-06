@@ -169,7 +169,68 @@ def check_rules() -> list[qa.Issue]:
     return [i for i in manager.validate_rule_sets() if i.level is qa.IssueLevel.ERROR]
 
 
-GATES = [check_forbidden_paths, scan_for_secrets, check_imports, smoke_test, check_rules]
+def check_override_precedence() -> list[qa.Issue]:
+    """Corrections must always win over upstream. Guarded, not assumed.
+
+    This is a stated invariant rather than an implementation detail, so a
+    refactor that quietly reintroduces a fallback should fail the release.
+    """
+    import overrides as ov
+    from models import RosterEntry
+
+    upstream = RosterEntry("Test Player", "AAA", "WR", 1, "ACT")
+    override = ov.PlayerOverride(
+        key="testplayer", display_name="Test Player", jersey_number=99, team="ZZZ"
+    )
+    book = ov.Overrides(players={"testplayer": override})
+
+    issues: list[qa.Issue] = []
+
+    contradicts = book.apply("testplayer", upstream)
+    if contradicts.jersey_number != 99 or contradicts.team != "ZZZ":
+        issues.append(
+            qa.Issue(
+                qa.IssueLevel.ERROR,
+                "release.override_not_authoritative",
+                f"correction lost to upstream: got {contradicts}",
+                "developer",
+            )
+        )
+
+    # Unset fields must fall through to upstream, not blank it.
+    if contradicts.position != "WR":
+        issues.append(
+            qa.Issue(
+                qa.IssueLevel.ERROR,
+                "release.override_clobbers_upstream",
+                f"unset field did not fall through: position={contradicts.position!r}",
+                "developer",
+            )
+        )
+
+    # A correction must stand alone when upstream has nothing.
+    synthesized = book.apply("testplayer", None)
+    if synthesized is None or synthesized.jersey_number != 99:
+        issues.append(
+            qa.Issue(
+                qa.IssueLevel.ERROR,
+                "release.override_missing_player",
+                "correction did not supply a player absent upstream",
+                "developer",
+            )
+        )
+
+    return issues
+
+
+GATES = [
+    check_forbidden_paths,
+    scan_for_secrets,
+    check_imports,
+    smoke_test,
+    check_rules,
+    check_override_precedence,
+]
 
 
 @dataclass

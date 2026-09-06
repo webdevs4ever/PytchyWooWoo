@@ -60,6 +60,13 @@ game rather than per player.
 - Pricing is always keyed by `Platform`. DK and FanDuel differ in salary, cap,
   and scoring, so nothing may assume one shared price.
 - Dome venues skip the weather call entirely.
+- **Manual corrections are the source of truth.** An override in
+  `overrides.json` always wins over upstream: when it contradicts the feed, when
+  the feed is ambiguous, and when the feed omits the player entirely. Partial
+  corrections layer field-by-field, taking the rest from upstream. Nothing in
+  the codebase may second-guess, soften, or fall back past a correction. QA may
+  report on one, never override it. `developer.check_override_precedence`
+  guards this on every release.
 
 ## External dependencies
 
@@ -277,8 +284,10 @@ rendering layer remains.
 - **Kickers have no roster entry when released.** `roster.not_found` fires for
   them, which is correct but indistinguishable from a misspelling. An
   `admin.py set` correction is the intended workaround.
-- **Corrections are trusted absolutely.** The console validates shape and
-  reports redundancy, but cannot tell a correct override from a confident typo.
+- **Corrections are trusted absolutely — by design.** The console validates
+  shape and reports redundancy, but cannot tell a correct override from a
+  confident typo. Fixing a bad correction is the operator's job; the audit log
+  in `overrides.json` records what was set, by whom, and when.
 - **Kickers and defenses have no splits.** They are absent from the weekly
   player stats used here, so `fetch_split` returns None for them and matchup
   flags are silently skipped.

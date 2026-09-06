@@ -29,6 +29,9 @@ Output is a CLI report today. A dashboard is planned (see below).
 | `qa.py` | Data-quality validation — `Issue`, `QAReport`, `validate()` |
 | `manager.py` | Versioned scoring rules and the dashboard view model |
 | `developer.py` | Release gates — secret scan, imports, smoke test — plus commit/push |
+| `overrides.py` | Manual corrections over upstream data — **read side only** |
+| `admin.py` | Admin console — the sole write path for corrections |
+| `overrides.json` | The corrections themselves, with an audit log |
 | `sources/weather.py` | NWS forecast at kickoff — **implemented** |
 | `sources/splits.py` | Defensive splits per position, from nflverse — **implemented** |
 | `sources/odds.py` | DK/FanDuel salary and projection — **implemented** |
@@ -197,6 +200,39 @@ to that player. A player with an `injury.out` issue comes back `playable: false`
 This keeps presentation out of the rules engine and gives any future dashboard
 one contract to consume.
 
+### `admin.py` and `overrides.py` — manual corrections
+
+Upstream feeds carry errors: a wrong jersey number, a stale team after a trade,
+a player missing from a roster file. These two modules let those be corrected
+without editing source.
+
+**Write authority is centralized at root.** `overrides.py` is read-only — any
+module may call `load()`, none may write. Every mutation goes through
+`admin.py`, so there is exactly one code path that can change a correction and
+exactly one place that records who changed what and why. The console enforces
+this literally: it refuses to run outside the repository root, because a
+correction applied from a subdirectory would write a second `overrides.json`
+that nothing reads, silently doing nothing.
+
+Every mutation prints the before/after and asks for confirmation. `--yes` skips
+the prompt for scripted use; nothing skips the audit entry.
+
+Corrections layer over upstream at lookup time and can also *supply* a player the
+feed omits entirely. `overrides.validate()` — wired into `qa.py` — reports the
+case that matters: a correction upstream has since made **redundant**. That one
+is invisible until the feed changes again, at which point it silently overrides a
+correct value with a stale one.
+
+| Command | Does |
+| --- | --- |
+| `python admin.py` | Interactive console |
+| `admin.py list` | All active corrections |
+| `admin.py inspect "Name"` | Upstream, override, and effective values side by side |
+| `admin.py set "Name" --number 14 --note "why"` | Create or replace |
+| `admin.py remove "Name"` | Delete |
+| `admin.py audit` | Change log — who, when, what |
+| `admin.py check` | Validate corrections against upstream |
+
 ### `developer.py` — release gates
 
 Owns the path from working tree to pushed commit. Five gates run before anything
@@ -239,7 +275,10 @@ rendering layer remains.
   or `_2026` asset yet, so `SPLITS_SEASON` defaults to 2024. Bump it (or pass
   `--season`) once the current season is published.
 - **Kickers have no roster entry when released.** `roster.not_found` fires for
-  them, which is correct but indistinguishable from a misspelling.
+  them, which is correct but indistinguishable from a misspelling. An
+  `admin.py set` correction is the intended workaround.
+- **Corrections are trusted absolutely.** The console validates shape and
+  reports redundancy, but cannot tell a correct override from a confident typo.
 - **Kickers and defenses have no splits.** They are absent from the weekly
   player stats used here, so `fetch_split` returns None for them and matchup
   flags are silently skipped.

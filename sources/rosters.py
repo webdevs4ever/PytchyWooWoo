@@ -79,7 +79,18 @@ class RosterBook:
         self.season = resolve_season(season)
         self._by_strict: dict[str, list[RosterEntry]] = {}
         self._by_name: dict[str, list[RosterEntry]] = {}
+        self._overrides = self._load_overrides()
         self._build()
+
+    @staticmethod
+    def _load_overrides():
+        """Manual corrections, read-only. A malformed file must not break lookups."""
+        import overrides as overrides_module
+
+        try:
+            return overrides_module.load()
+        except overrides_module.OverrideError:
+            return overrides_module.Overrides()
 
     def _build(self) -> None:
         from sources.odds import normalize_name, strict_name
@@ -108,6 +119,15 @@ class RosterBook:
             self._by_strict.setdefault(strict_name(row.get("full_name", "")), []).append(entry)
             self._by_name.setdefault(key, []).append(entry)
 
+    def entry_upstream(self, strict_key: str) -> RosterEntry | None:
+        """The raw upstream record, before any manual correction.
+
+        `overrides.validate()` needs this to tell a still-needed correction from
+        one upstream has since made redundant.
+        """
+        matches = self._by_strict.get(strict_key, [])
+        return matches[0] if len(matches) == 1 else None
+
     def entry_for(self, player_name: str, team: str | None = None) -> RosterEntry | None:
         """Resolve a player, preferring an exact full-name match.
 
@@ -127,11 +147,18 @@ class RosterBook:
                     return None  # genuinely ambiguous
             return candidates[0] if len(candidates) == 1 else None
 
-        exact = pick(self._by_strict.get(strict_name(player_name), []))
-        if exact:
-            return exact
+        key = strict_name(player_name)
 
-        return pick(self._by_name.get(normalize_name(player_name), []))
+        exact = pick(self._by_strict.get(key, []))
+        if exact:
+            return self._overrides.apply(key, exact)
+
+        loose = pick(self._by_name.get(normalize_name(player_name), []))
+        if loose:
+            return self._overrides.apply(key, loose)
+
+        # A correction may supply a player the feed omits entirely.
+        return self._overrides.apply(key, None)
 
     def number_for(self, player_name: str, team: str | None = None) -> int | None:
         entry = self.entry_for(player_name, team)

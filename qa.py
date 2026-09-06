@@ -544,6 +544,19 @@ def validate(
 
     if include_environment:
         issues.extend(check_environment())
+        try:
+            import overrides
+
+            issues.extend(overrides.validate())
+        except Exception as exc:  # a broken overrides file must not abort QA
+            issues.append(
+                Issue(
+                    IssueLevel.WARNING,
+                    "override.unreadable",
+                    f"overrides.json could not be read: {exc}",
+                    "overrides",
+                )
+            )
 
     issues.extend(check_duplicates(slates))
 

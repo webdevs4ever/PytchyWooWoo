@@ -52,6 +52,13 @@ NFLVERSE_BASE_URL = (
     "https://github.com/nflverse/nflverse-data/releases/download/player_stats"
 )
 SPLITS_SEASON = int(os.environ.get("SPLITS_SEASON", "2024"))
+
+# Injury reports are published under a separate release and appear earlier in
+# the year than the stats file, so they track their own season.
+NFLVERSE_INJURY_URL = (
+    "https://github.com/nflverse/nflverse-data/releases/download/injuries"
+)
+INJURY_SEASON = int(os.environ.get("INJURY_SEASON", "0")) or None
 SPLITS_SCORING = os.environ.get("SPLITS_SCORING", "ppr")  # "ppr" or "standard"
 
 # Downloaded season files land here; each is several MB, so they are cached

@@ -228,3 +228,36 @@ class ScoringRules:
             total += self.bonus_100_receiving_yards
 
         return round(total, 2)
+
+
+@dataclass(frozen=True)
+class InjuryStatus:
+    """A player's standing on the official injury report.
+
+    `report_status` is the game-status designation ("Out", "Doubtful",
+    "Questionable") and is empty when a player appears on the practice report
+    without a game designation.
+    """
+
+    player_name: str
+    team: str
+    week: int
+    report_status: str = ""
+    primary_injury: str = ""
+    practice_status: str = ""
+
+    @property
+    def is_ruled_out(self) -> bool:
+        return self.report_status.strip().lower() == "out"
+
+    @property
+    def is_doubtful(self) -> bool:
+        return self.report_status.strip().lower() == "doubtful"
+
+    @property
+    def is_questionable(self) -> bool:
+        return self.report_status.strip().lower() == "questionable"
+
+    def __str__(self) -> str:
+        detail = self.primary_injury or self.practice_status or "no detail"
+        return f"{self.report_status or 'listed'} ({detail})"

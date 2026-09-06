@@ -172,6 +172,16 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help=f"season for split data (default {config.SPLITS_SEASON})",
     )
+    parser.add_argument(
+        "--qa",
+        action="store_true",
+        help="run data-quality validation before the report",
+    )
+    parser.add_argument(
+        "--qa-strict",
+        action="store_true",
+        help="run validation and exit non-zero if it finds errors",
+    )
     parser.add_argument("-q", "--quiet", action="store_true", help="suppress source warnings")
     args = parser.parse_args(argv)
 
@@ -186,6 +196,19 @@ def main(argv: list[str] | None = None) -> int:
         enrich_with_splits(slates, quiet=args.quiet)
     if not args.no_pricing:
         enrich_with_pricing(slates, use_props=not args.no_props, quiet=args.quiet)
+
+    if args.qa or args.qa_strict:
+        import qa
+
+        qa_report = qa.validate(slates)
+        print("=" * 72)
+        print("Data quality")
+        print("=" * 72)
+        print(qa_report.format())
+        print()
+        if args.qa_strict and not qa_report.ok:
+            print("Aborting: validation found errors.", file=sys.stderr)
+            return 1
 
     print("=" * 72)
     print("Fantasy Bet Helper — flag report")

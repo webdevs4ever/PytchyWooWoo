@@ -26,9 +26,11 @@ Output is a CLI report today. A dashboard is planned (see below).
 | `config.py` | Thresholds, API settings, salary caps, 32 stadium coordinates |
 | `models.py` | `Player`, `Game`, `Venue`, `WeatherCondition`, `MatchupSplit`, `Pricing`, `StatLine`, `ScoringRules`, `Flag`, `PlayerSlate` |
 | `rules.py` | `check_*` functions and `evaluate()` |
+| `qa.py` | Data-quality validation — `Issue`, `QAReport`, `validate()` |
 | `sources/weather.py` | NWS forecast at kickoff — **implemented** |
 | `sources/splits.py` | Defensive splits per position, from nflverse — **implemented** |
 | `sources/odds.py` | DK/FanDuel salary and projection — **implemented** |
+| `sources/injuries.py` | Weekly injury report from nflverse — **implemented** |
 
 ## Cross-cutting concerns
 
@@ -59,6 +61,7 @@ game rather than per player.
 | --- | --- | --- |
 | NWS API (`api.weather.gov`) | Kickoff forecast. Free, no key, needs User-Agent | `WeatherUnavailable` → weather flags skipped |
 | nflverse (`player_stats_{season}.csv`) | Defensive splits, nflfastR-derived. Free, no key | `SplitsUnavailable` → matchup flags skipped |
+| nflverse (`injuries_{season}.csv`) | Official injury report, for QA | `InjuriesUnavailable` → QA warning, pipeline continues |
 | The Odds API | Player props → projections. Free tier ~500 req/month | Falls back to salary-export season averages |
 | DK / FD contest CSV exports | Salaries and salary caps. User-downloaded | No export → no value flags for that platform |
 
@@ -121,15 +124,41 @@ Three roles:
 
 | Agent | Owns |
 | --- | --- |
-| **QA Agent** | Verification. Current player alerts, injury status, and empty or malformed stat sets that would break the UI. Anything where bad upstream data reaches the user as a broken render or a silently wrong flag. |
+| **QA Agent** | Verification. Current player alerts, injury status, and empty or malformed stat sets that would break the UI. **Implemented as `qa.py`** — a plain validation module, not a scheduled agent. Scheduled runs and CI wrapping come later. |
 | **Developer Agent** | Builds and pushes code. |
 | **Manager Agent** | The UI, and keeping game rules current as platforms change scoring and pricing. |
 
-The QA Agent's remit maps onto failure modes this codebase already has: a
-kicker with no split returns None, a defense with too small a sample is
-suppressed, and pricing may be missing for one platform. Each is handled
-correctly today at the rules layer, but none is surfaced to a user — that gap is
-what the QA Agent closes once there is a UI to break.
+### `qa.py` — the validation layer
+
+`Flag` and `Issue` are deliberately different things. A `Flag` is a betting
+signal the user should weigh. An `Issue` is a defect: missing, stale, or
+incoherent data that would render wrong, break a UI, or silently suppress a flag
+the user expected. The rules engine stays quiet when data is absent by design —
+this module is what makes that silence visible.
+
+Three levels: `ERROR` (would render wrong; `QAReport.ok` is False),
+`WARNING` (degraded output worth knowing about), `NOTICE` (expected absence,
+recorded for transparency).
+
+Checks return issues rather than raising, so one bad player never aborts
+validation of the rest of the slate. Categories:
+
+- **Integrity** — player on neither team, duplicate entries, kickoff in the past
+  or beyond the NWS horizon
+- **Completeness** — missing weather, split, or pricing, distinguishing expected
+  absence (kickers have no splits) from a failed lookup
+- **Soundness** — zero or over-cap salary, zero projection against a real salary,
+  forecast values outside physical range
+- **Availability** — injury designations from the official report
+- **Environment** — stale `SPLITS_SEASON`, missing API key, empty `salaries/`
+
+The most valuable check is `unsound.projection_zero`. A zero projection against a
+real salary is not missing data, so the value check runs and confidently reports
+the worst value on the board. That is a wrong answer rather than an absent one,
+which is exactly the class of defect this layer exists to catch.
+
+Run standalone (`python qa.py`, exit 1 on errors) or inline (`main.py --qa`,
+`--qa-strict` to abort before the report).
 
 ## Planned: Dashboard
 
@@ -145,7 +174,8 @@ Blocked on nothing — it can proceed in parallel once the CLI output stabilizes
 3. ~~`rules.py` with the weather check~~ — done
 4. ~~`sources/splits.py` and its check~~ — done
 5. ~~`sources/odds.py`~~ — done
-6. Agents (QA / Developer / Manager) — unblocked by step 5
+6. ~~QA validation (`qa.py`)~~ — done
+7. Developer and Manager agents — next
 
 ## Known gaps
 

@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Environment
+.env
+
+# macOS
+.DS_Store
+
+# Cached source data
+.cache/
+
+# Weekly salary exports (week-specific, go stale immediately)
+salaries/*.csv

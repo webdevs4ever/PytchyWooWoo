@@ -398,7 +398,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     import main as pipeline
-    import manager
+    from sources import manager
 
     slates = pipeline.build_demo_slates()
     pipeline.enrich_with_rosters(slates, quiet=True)

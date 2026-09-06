@@ -26,9 +26,9 @@ Output is a CLI report today. A dashboard is planned (see below).
 | `config.py` | Thresholds, API settings, salary caps, 32 stadium coordinates |
 | `models.py` | `Player`, `Game`, `Venue`, `WeatherCondition`, `MatchupSplit`, `Pricing`, `StatLine`, `ScoringRules`, `Flag`, `PlayerSlate` |
 | `rules.py` | `check_*` functions and `evaluate()` |
-| `qa.py` | Data-quality validation — `Issue`, `QAReport`, `validate()` |
-| `manager.py` | Versioned scoring rules and the dashboard view model |
-| `developer.py` | Release gates — secret scan, imports, smoke test — plus commit/push |
+| `sources/qa.py` | Data-quality validation — `Issue`, `QAReport`, `validate()` |
+| `sources/manager.py` | Versioned scoring rules and the dashboard view model |
+| `sources/developer.py` | Release gates — secret scan, imports, smoke test — plus commit/push |
 | `dashboard.py` | HTML renderer for the view model — **implemented** |
 | `overrides.py` | Manual corrections over upstream data — **read side only** |
 | `admin.py` | Admin console — the sole write path for corrections |
@@ -38,6 +38,21 @@ Output is a CLI report today. A dashboard is planned (see below).
 | `sources/odds.py` | DK/FanDuel salary and projection — **implemented** |
 | `sources/injuries.py` | Weekly injury report from nflverse — **implemented** |
 | `sources/rosters.py` | Jersey numbers and roster status from nflverse — **implemented** |
+
+### A note on `sources/`
+
+The folder holds two different kinds of module. `weather`, `splits`, `odds`,
+`injuries`, and `rosters` are **ingestion** — one per external provider, each
+with its own failure mode. `qa`, `manager`, and `developer` are the **agent
+roles** from the plan below, which are internal and talk to no provider.
+
+They live together by request. An `agents/` package would keep each folder's
+meaning single, and remains the cleaner split if the count grows.
+
+Every module here is importable as `sources.<name>` and runnable either way:
+
+    python -m sources.qa          # idiomatic
+    python sources/qa.py          # also works, via a small sys.path bootstrap
 
 ## Cross-cutting concerns
 
@@ -66,7 +81,7 @@ game rather than per player.
   the feed is ambiguous, and when the feed omits the player entirely. Partial
   corrections layer field-by-field, taking the rest from upstream. Nothing in
   the codebase may second-guess, soften, or fall back past a correction. QA may
-  report on one, never override it. `developer.check_override_precedence`
+  report on one, never override it. `sources.developer.check_override_precedence`
   guards this on every release.
 
 ## External dependencies
@@ -157,7 +172,7 @@ Three roles:
 | **Developer Agent** | Builds and pushes code. **Implemented as `developer.py`.** |
 | **Manager Agent** | The UI, and keeping game rules current as platforms change scoring and pricing. **Implemented as `manager.py`.** |
 
-### `qa.py` — the validation layer
+### `sources/qa.py` — the validation layer
 
 `Flag` and `Issue` are deliberately different things. A `Flag` is a betting
 signal the user should weigh. An `Issue` is a defect: missing, stale, or
@@ -186,10 +201,10 @@ real salary is not missing data, so the value check runs and confidently reports
 the worst value on the board. That is a wrong answer rather than an absent one,
 which is exactly the class of defect this layer exists to catch.
 
-Run standalone (`python qa.py`, exit 1 on errors) or inline (`main.py --qa`,
-`--qa-strict` to abort before the report).
+Run standalone (`python -m sources.qa`, exit 1 on errors) or inline
+(`main.py --qa`, `--qa-strict` to abort before the report).
 
-### `manager.py` — rules and presentation
+### `sources/manager.py` — rules and presentation
 
 Owns the two things that change for reasons outside this codebase.
 
@@ -242,7 +257,7 @@ correct value with a stale one.
 | `admin.py status` | Slate health: players, flags, QA counts, per-position breakdown |
 | `admin.py check` | Validate corrections against upstream |
 
-### `developer.py` — release gates
+### `sources/developer.py` — release gates
 
 Owns the path from working tree to pushed commit. Five gates run before anything
 is written: forbidden paths, secret scan, module imports, an offline smoke test,

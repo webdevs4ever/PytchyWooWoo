@@ -268,7 +268,7 @@ def cmd_status() -> int:
     players to pick, not how many notices the last run produced.
     """
     import main as pipeline
-    import manager
+    from sources import manager
 
     slates = pipeline.build_demo_slates()
     pipeline.enrich_with_rosters(slates, quiet=True)

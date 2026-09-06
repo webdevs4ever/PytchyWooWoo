@@ -16,13 +16,23 @@ any future UI — web, CLI table, JSON export — one contract to consume.
 
 from __future__ import annotations
 
+if __name__ == "__main__" and __package__ in (None, ""):
+    # Allow `python sources/manager.py` as well as `python -m sources.manager`:
+    # running a file inside a package leaves the repo root off sys.path.
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    __package__ = "sources"
+
+
 import json
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timezone
 
 import config
-import qa
 import rules
+from sources import qa
 from models import Flag, Platform, PlayerSlate, Position, ScoringRules, Severity
 
 # --- Rule versioning --------------------------------------------------------

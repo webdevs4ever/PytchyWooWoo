@@ -12,15 +12,25 @@ shouldn't — a half-finished refactor, a secret, a stale branch.
 
 from __future__ import annotations
 
+if __name__ == "__main__" and __package__ in (None, ""):
+    # Allow `python sources/developer.py` as well as `python -m sources.developer`:
+    # running a file inside a package leaves the repo root off sys.path.
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    __package__ = "sources"
+
+
 import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import qa
+from sources import qa
 
-REPO_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # Files that must never be committed regardless of .gitignore state.
 FORBIDDEN_PATHS = re.compile(r"(^|/)(\.env|\.venv/|__pycache__/|\.cache/|salaries/.*\.csv)")
@@ -124,9 +134,12 @@ def scan_for_secrets(paths: list[str] | None = None) -> list[qa.Issue]:
 
 def check_imports() -> list[qa.Issue]:
     """Every module must import cleanly — a syntax error should not reach main."""
-    modules = [
-        p.stem for p in REPO_ROOT.glob("*.py") if p.stem not in {"developer"}
-    ] + [f"sources.{p.stem}" for p in (REPO_ROOT / "sources").glob("*.py") if p.stem != "__init__"]
+    modules = [p.stem for p in REPO_ROOT.glob("*.py")] + [
+        f"sources.{p.stem}"
+        for p in (REPO_ROOT / "sources").glob("*.py")
+        # Skip __init__ (nothing to check) and this module (already imported).
+        if p.stem not in {"__init__", "developer"}
+    ]
 
     issues: list[qa.Issue] = []
     for module in sorted(modules):
@@ -164,7 +177,7 @@ def smoke_test() -> list[qa.Issue]:
 
 def check_rules() -> list[qa.Issue]:
     """Scoring rules must be internally consistent before a release."""
-    import manager
+    from sources import manager
 
     return [i for i in manager.validate_rule_sets() if i.level is qa.IssueLevel.ERROR]
 

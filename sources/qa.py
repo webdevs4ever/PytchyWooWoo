@@ -16,6 +16,16 @@ validation of a slate.
 
 from __future__ import annotations
 
+if __name__ == "__main__" and __package__ in (None, ""):
+    # Allow `python sources/qa.py` as well as `python -m sources.qa`:
+    # running a file inside a package leaves the repo root off sys.path.
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    __package__ = "sources"
+
+
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum

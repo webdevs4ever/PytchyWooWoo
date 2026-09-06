@@ -184,7 +184,7 @@ def validate(overrides: Overrides | None = None) -> list:
     what the feed already says. Harmless today, but it keeps applying, so if the
     feed changes again it will quietly override the new value with a stale one.
     """
-    import qa
+    from sources import qa
 
     overrides = overrides if overrides is not None else load()
     if not overrides.players:

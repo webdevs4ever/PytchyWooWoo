@@ -232,7 +232,7 @@ def main(argv: list[str] | None = None) -> int:
         enrich_with_pricing(slates, use_props=not args.no_props, quiet=args.quiet)
 
     if args.qa or args.qa_strict:
-        import qa
+        from sources import qa
 
         qa_report = qa.validate(slates)
         print("=" * 72)

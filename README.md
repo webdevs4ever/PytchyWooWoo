@@ -6,48 +6,37 @@ stories in a matchup.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for how it fits together.
 
-## Setup
+## Quick start
 
-Python 3.11+. One dependency.
+```bash
+npm run setup     # once
+npm run dev       # http://127.0.0.1:8765
+```
+
+That's it. **This is a Python project** — npm is a task runner here and installs
+no JavaScript. `npm run setup` builds a virtualenv and installs one dependency
+(`requests`); `npm run dev` starts the local server.
+
+| Command | Does |
+| --- | --- |
+| `npm run dev` | Comp Mode in a browser — upload a lineup, see it marked and compared. Localhost only. |
+| `npm run board` | Builds and opens the board: five position cards, flags, narratives, DK/FD toggle |
+| `npm run report` | Flag report in the terminal |
+| `npm run admin` | Admin console — corrections, narrative curation, slate health |
+| `npm run check` | Release gates |
+
+### Without npm
+
+Every script is a one-line wrapper around Python. Python 3.11+, one dependency.
 
 ```bash
 python3 -m venv .venv
 ./.venv/bin/pip install -r requirements.txt
-```
-
-Everything below assumes `./.venv/bin/python`. Activate the venv with
-`source .venv/bin/activate` if you would rather type `python`.
-
-## Launching it
-
-**The app — Comp Mode in a browser.** Upload a lineup, see it marked and
-compared against the optimal one.
-
-```bash
 ./.venv/bin/python -m sources.serve        # http://127.0.0.1:8765
 ```
 
-Binds to localhost only.
-
-**The board.** Generates a self-contained page: five position cards, flags,
-narratives, and a DraftKings/FanDuel toggle.
-
-```bash
-./.venv/bin/python dashboard.py && open dashboard.html
-```
-
-**The flag report, in the terminal.**
-
-```bash
-./.venv/bin/python main.py --qa
-```
-
-**The admin console.** Data corrections, narrative curation, slate health. Must
-be run from the repository root.
-
-```bash
-./.venv/bin/python admin.py
-```
+Use `./.venv/bin/python` rather than bare `python`, or activate the venv with
+`source .venv/bin/activate`. `admin.py` must be run from the repository root.
 
 ## Other entry points
 

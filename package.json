@@ -1,0 +1,14 @@
+{
+  "name": "fantasy-bet-helper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Task runner only. This is a Python project — npm has no dependencies here and installs nothing.",
+  "scripts": {
+    "setup": "python3 -m venv .venv && ./.venv/bin/pip install -q -r requirements.txt && echo 'Ready. Run: npm run dev'",
+    "dev": "./.venv/bin/python -m sources.serve",
+    "board": "./.venv/bin/python dashboard.py && open dashboard.html",
+    "report": "./.venv/bin/python main.py --qa",
+    "admin": "./.venv/bin/python admin.py",
+    "check": "./.venv/bin/python sources/developer.py --verify"
+  }
+}

@@ -274,9 +274,25 @@ deliberate departures — the card carries flags, per-platform pricing, and QA
 issues the mockup had no room for; and severity drives the card edge, so the
 orange border means something rather than being decorative.
 
-**Known deviation:** the mockup's condensed display face is not embedded. Font
-CDNs are blocked in the publish target and no licensed file is vendored, so the
-page uses a heavy system stack with tight tracking. Close in feel, not identical.
+**Status: pending design review.** The current render departs from the approved
+direction and has not been signed off. Deferred, not settled. The departures to
+revisit, in the order they were introduced:
+
+1. **Card density.** The mockup showed avatar, name, and number. The render adds
+   flags with reasons, per-platform pricing rows, and inline QA issues. Likely
+   too busy for a grid meant to be scanned.
+2. **Card-edge colour encodes severity.** The mockup had every card
+   orange-bordered as a constant identity element. Here the border is driven by
+   worst flag severity, so most cards render muted blue-violet. If the orange
+   edge should be constant, severity needs another home — a corner pip, a
+   background wash, or a dedicated chip.
+3. **Display face.** The mockup's condensed grotesque is not embedded. Font CDNs
+   are blocked in the publish target and no licensed file is vendored, so the
+   page uses a heavy system stack with tight tracking. Close in silhouette, not
+   the same face. Naming the font and vendoring it as a data URI resolves this.
+
+`manager.build_view()` is unaffected by any of these — the payload is a data
+contract, so a redesign touches `dashboard.py` only.
 
 ## Build order
 

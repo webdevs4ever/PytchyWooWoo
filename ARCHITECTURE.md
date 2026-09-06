@@ -39,6 +39,7 @@ Output is a CLI report today. A dashboard is planned (see below).
 | `sources/injuries.py` | Weekly injury report from nflverse — **implemented** |
 | `sources/rosters.py` | Jersey numbers and roster status from nflverse — **implemented** |
 | `sources/narratives.py` | Narrative Street — revenge games and reunions from roster history |
+| `sources/comp.py` | Comp Mode — lineup optimizer, upload parser, and diff |
 
 ### A note on `sources/`
 
@@ -154,25 +155,37 @@ per run would be wasteful and rude to the host.
 The three features this app is for, as defined 2026-09-06. Everything built so
 far — ingestion, rules, QA, dashboard — is groundwork for these.
 
-### 1. Comp Mode
+### 1. Comp Mode — **built**
 
-A user uploads their own lineups and sees them compared against an ideal lineup,
-and against injury and weather flags.
+A user uploads a lineup and sees it against the optimal one, with injury and
+weather alerts on their own picks. `python -m sources.comp lineups/week1.txt
+--platform draftkings`.
 
-This refines the Comps Mode note in `handoff2.md`, which described generating an
-optimal lineup per platform. The addition is the **upload and diff**: the user's
-actual lineup is the subject, and the optimal one is the benchmark.
+**The optimizer is exact.** Positional requirements and the cap interact, so a
+greedy pick cannot be trusted — and in fact both greedy strategies tested
+(highest points first, best points-per-dollar first) *failed to fill a valid
+roster at all*, spending too much early to afford the remaining slots. The
+solution here resolves the FLEX by trying each eligible position, runs a small
+knapsack per position over salary, then convolves the position tables under the
+cap. Each table is pruned to its Pareto frontier, which keeps a full slate at
+about 0.01s. Verified against exhaustive search on a reduced pool: identical
+result, 127.8 points at $49,200.
 
-- *Have:* per-platform scoring and salary caps (`sources/manager.py`), value and
-  divergence flags (`rules.py`), injury and weather flags.
-- *Need:* a lineup upload parser, an optimizer (best lineup under each
-  platform's cap and roster constraints), and a diff view — which slots differ,
-  what each swap costs or gains.
-- *Blocked on:* real salary exports. An optimizer with no salaries has nothing
-  to optimize over.
-- *Note:* the optimizer is a constrained knapsack, not a sort. Positional
-  requirements and the cap interact, so a greedy pick by points-per-dollar will
-  not produce the optimal lineup.
+**Ruled-out players are excluded from the benchmark.** Optimising on projection
+alone builds lineups around players who will not take a snap — their salary is
+cheap precisely because they are out. Pass `--include-out` to see the inflated
+version; the gap between them is the cost of the illusion.
+
+**Swaps explain their own arithmetic.** A ruled-out player's projection in the
+salary export is a stale season average, not the zero they will score, so
+dropping them can display as a point loss. Those swaps carry a note saying so.
+
+- *Roster rules* live in `config.LINEUPS` as `LineupRules`, versioned alongside
+  scoring because both change when a platform revises its game. Neither main
+  slate includes a kicker; both run nine slots with one RB/WR/TE flex.
+- *Still needed:* weather alerts depend on the export's Game Info column to link
+  a salary row back to a kickoff. `game_from_info()` parses the real format;
+  the sample exports do not carry it, so weather is skipped in the demo.
 
 ### 2. Narrative Street — **built**
 
@@ -402,7 +415,8 @@ contract, so a redesign touches `dashboard.py` only.
 7. ~~Developer and Manager modules~~ — done
 8. ~~Dashboard — the card grid, consuming `manager.build_view()`~~ — done
 9. ~~Narrative Street~~ — done
-10. Comp Mode — blocked on real salary exports
+10. ~~Comp Mode~~ — done
+11. Head-to-head quiz game — **not started, gated on approval**
 
 ## Known gaps
 

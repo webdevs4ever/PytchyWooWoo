@@ -321,3 +321,65 @@ class Narrative:
 
     def __str__(self) -> str:
         return f"[{self.kind.value}] {self.headline} — {self.detail}"
+
+
+@dataclass(frozen=True)
+class LineupRules:
+    """How a valid lineup is constructed on one platform.
+
+    Separate from `ScoringRules` because these govern roster shape rather than
+    points. Both change when a platform revises its game, so both are versioned
+    together in `sources/manager.py`.
+    """
+
+    platform: Platform
+    salary_cap: int
+    requirements: dict[Position, int]      # fixed slots per position
+    flex_count: int = 0
+    flex_eligible: frozenset[Position] = frozenset()
+
+    @property
+    def total_slots(self) -> int:
+        return sum(self.requirements.values()) + self.flex_count
+
+    def slot_labels(self) -> list[str]:
+        """Slot names in lineup order, e.g. QB, RB1, RB2, WR1..., FLEX, DST."""
+        labels: list[str] = []
+        for position in (Position.QB, Position.RB, Position.WR, Position.TE, Position.DST):
+            count = self.requirements.get(position, 0)
+            if count == 1:
+                labels.append(position.value)
+            else:
+                labels.extend(f"{position.value}{i + 1}" for i in range(count))
+        labels.extend(
+            "FLEX" if self.flex_count == 1 else f"FLEX{i + 1}"
+            for i in range(self.flex_count)
+        )
+        return labels
+
+
+@dataclass(frozen=True)
+class LineupEntry:
+    """One filled slot."""
+
+    slot: str
+    player: Player
+    salary: int
+    projected_points: float
+
+
+@dataclass
+class Lineup:
+    platform: Platform
+    entries: list[LineupEntry] = field(default_factory=list)
+
+    @property
+    def salary(self) -> int:
+        return sum(e.salary for e in self.entries)
+
+    @property
+    def projected_points(self) -> float:
+        return round(sum(e.projected_points for e in self.entries), 2)
+
+    def player_ids(self) -> set[str]:
+        return {e.player.player_id for e in self.entries}

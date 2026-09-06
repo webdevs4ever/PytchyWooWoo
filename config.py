@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from models import Platform, ScoringRules, Venue
+from models import LineupRules, Platform, Position, ScoringRules, Venue
 
 # --- API access -------------------------------------------------------------
 
@@ -130,6 +130,44 @@ FD_SCORING = ScoringRules(
 SCORING = {
     Platform.DRAFTKINGS: DK_SCORING,
     Platform.FANDUEL: FD_SCORING,
+}
+
+# --- Lineup construction (differs per platform) -----------------------------
+# Neither main-slate game includes a kicker; both run a nine-slot roster with a
+# single RB/WR/TE flex. The caps differ, which is what makes the two optimal
+# lineups diverge even from identical projections.
+
+DK_LINEUP = LineupRules(
+    platform=Platform.DRAFTKINGS,
+    salary_cap=50_000,
+    requirements={
+        Position.QB: 1,
+        Position.RB: 2,
+        Position.WR: 3,
+        Position.TE: 1,
+        Position.DST: 1,
+    },
+    flex_count=1,
+    flex_eligible=frozenset({Position.RB, Position.WR, Position.TE}),
+)
+
+FD_LINEUP = LineupRules(
+    platform=Platform.FANDUEL,
+    salary_cap=60_000,
+    requirements={
+        Position.QB: 1,
+        Position.RB: 2,
+        Position.WR: 3,
+        Position.TE: 1,
+        Position.DST: 1,
+    },
+    flex_count=1,
+    flex_eligible=frozenset({Position.RB, Position.WR, Position.TE}),
+)
+
+LINEUPS = {
+    Platform.DRAFTKINGS: DK_LINEUP,
+    Platform.FANDUEL: FD_LINEUP,
 }
 
 SALARY_CAPS = {p.value: r.salary_cap for p, r in SCORING.items()}

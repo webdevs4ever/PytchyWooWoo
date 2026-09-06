@@ -30,12 +30,13 @@ import csv
 import json
 import re
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 import requests
 
 import config
-from models import Platform, Player, Pricing, StatLine
+from models import Platform, Player, Position, Pricing, StatLine
 
 # Odds API market -> StatLine field.
 MARKET_TO_FIELD = {
@@ -101,11 +102,29 @@ def _detect_platform(fieldnames: list[str]) -> Platform | None:
     return None
 
 
-def load_salaries(path: Path, platform: Platform | None = None) -> dict[str, Pricing]:
+@dataclass(frozen=True)
+class Candidate:
+    """A priced, position-tagged player from a contest export.
+
+    The optimizer draws from the whole export, not just the slate, so position
+    and team have to survive parsing — `Pricing` alone is not enough to build a
+    lineup from.
+    """
+
+    player: Player
+    pricing: Pricing
+
+
+def load_salaries(
+    path: Path,
+    platform: Platform | None = None,
+    pool: list[Candidate] | None = None,
+) -> dict[str, Pricing]:
     """Parse a DraftKings or FanDuel contest export into `Pricing` by name key.
 
     The export's season average is used as the baseline projection; props
-    override it later when available.
+    override it later when available. When `pool` is given, full candidates are
+    appended to it for the optimizer.
     """
     if not path.exists():
         raise OddsUnavailable(f"Salary export not found: {path}")
@@ -125,6 +144,8 @@ def load_salaries(path: Path, platform: Platform | None = None) -> dict[str, Pri
                 name = row.get("Name") or ""
                 raw_salary = row.get("Salary")
                 raw_projection = row.get("AvgPointsPerGame")
+                raw_position = row.get("Position") or ""
+                team = (row.get("TeamAbbrev") or "").strip().upper()
             else:
                 name = (
                     row.get("Nickname")
@@ -132,6 +153,8 @@ def load_salaries(path: Path, platform: Platform | None = None) -> dict[str, Pri
                 )
                 raw_salary = row.get("Salary")
                 raw_projection = row.get("FPPG")
+                raw_position = row.get("Position") or ""
+                team = (row.get("Team") or "").strip().upper()
 
             key = normalize_name(name)
             if not key:
@@ -145,16 +168,31 @@ def load_salaries(path: Path, platform: Platform | None = None) -> dict[str, Pri
             if salary <= 0:
                 continue
 
-            out[key] = Pricing(
+            price = Pricing(
                 platform=platform, salary=salary, projected_points=projection
             )
+            out[key] = price
+
+            if pool is not None:
+                try:
+                    position = Position(raw_position.strip().upper())
+                except ValueError:
+                    continue  # a slot label like RB/FLEX, or an unknown position
+                pool.append(
+                    Candidate(
+                        player=Player(key, name, position, team),
+                        pricing=price,
+                    )
+                )
 
     if not out:
         raise OddsUnavailable(f"No usable rows in {path.name}")
     return out
 
 
-def load_all_salaries(directory: Path | None = None) -> dict[Platform, dict[str, Pricing]]:
+def load_all_salaries(
+    directory: Path | None = None, pools: dict[Platform, list[Candidate]] | None = None
+) -> dict[Platform, dict[str, Pricing]]:
     """Load every salary export in `directory`, keyed by platform.
 
     Missing files are not an error — the caller degrades to whatever is present.
@@ -165,13 +203,16 @@ def load_all_salaries(directory: Path | None = None) -> dict[Platform, dict[str,
         return tables
 
     for path in sorted(directory.glob("*.csv")):
+        collected: list[Candidate] = []
         try:
-            table = load_salaries(path)
+            table = load_salaries(path, pool=collected)
         except OddsUnavailable:
             continue
         if table:
             platform = next(iter(table.values())).platform
             tables.setdefault(platform, {}).update(table)
+            if pools is not None and collected:
+                pools.setdefault(platform, []).extend(collected)
     return tables
 
 
@@ -295,7 +336,8 @@ class PricingBook:
     """Combined salaries and projections, loaded once and queried per player."""
 
     def __init__(self, use_props: bool = True) -> None:
-        self.salaries = load_all_salaries()
+        self.pools: dict[Platform, list[Candidate]] = {}
+        self.salaries = load_all_salaries(pools=self.pools)
         self.props: dict[Platform, dict[str, StatLine]] = {}
         self.props_error: str | None = None
 
@@ -306,6 +348,25 @@ class PricingBook:
                         self.props.setdefault(platform, {}).update(players)
             except (OddsUnavailable, KeyError) as exc:
                 self.props_error = str(exc)
+
+    def pool_for(self, platform: Platform) -> list[Candidate]:
+        """Every priced player on one platform, with projections applied."""
+        out: list[Candidate] = []
+        props = self.props.get(platform, {})
+        for candidate in self.pools.get(platform, []):
+            key = normalize_name(candidate.player.name)
+            stats = props.get(key)
+            if stats is not None and not stats.is_empty():
+                projected = config.SCORING[platform].score(stats)
+                out.append(
+                    Candidate(
+                        player=candidate.player,
+                        pricing=Pricing(platform, candidate.pricing.salary, projected),
+                    )
+                )
+            else:
+                out.append(candidate)
+        return out
 
     def pricing_for(self, player: Player) -> dict[Platform, Pricing]:
         """Salary and projection per platform, empty when nothing is known."""

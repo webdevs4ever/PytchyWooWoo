@@ -18,3 +18,7 @@ salaries/*.csv
 
 # Generated dashboard output
 dashboard.html
+
+# Weekly lineups (week-specific)
+lineups/*.txt
+lineups/*.csv

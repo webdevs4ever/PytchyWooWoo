@@ -78,8 +78,14 @@ class PlayerOverride:
 @dataclass
 class Overrides:
     players: dict[str, PlayerOverride] = field(default_factory=dict)
+    # Player keys whose narrative you have promoted to the board. The engine
+    # detects every story; this is the shortlist that earns a bullhorn.
+    featured: list[str] = field(default_factory=list)
     history: list[dict] = field(default_factory=list)
     updated_at: str = ""
+
+    def is_featured(self, strict_key: str) -> bool:
+        return strict_key in self.featured
 
     def get(self, strict_key: str) -> PlayerOverride | None:
         return self.players.get(strict_key)
@@ -133,6 +139,7 @@ def _parse(payload: dict) -> Overrides:
 
     return Overrides(
         players=players,
+        featured=list(payload.get("featured") or []),
         history=payload.get("history") or [],
         updated_at=payload.get("updated_at", ""),
     )
@@ -171,6 +178,7 @@ def serialize(overrides: Overrides) -> dict:
             }
             for key, o in sorted(overrides.players.items())
         },
+        "featured": sorted(overrides.featured),
         "history": overrides.history[-200:],
     }
 

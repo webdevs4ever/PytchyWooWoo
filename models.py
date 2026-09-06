@@ -304,6 +304,11 @@ class NarrativeKind(str, Enum):
     REUNION = "reunion"    # facing former teammates
 
 
+class NarrativeStrength(str, Enum):
+    STRONG = "strong"
+    WEAK = "weak"
+
+
 @dataclass(frozen=True)
 class Narrative:
     """A story about a matchup, not a signal about it.
@@ -318,9 +323,18 @@ class Narrative:
     detail: str
     player: Player | None = None
     seasons: tuple[int, ...] = ()
+    strength: NarrativeStrength = NarrativeStrength.WEAK
+    # Why this one fired, and the rule that graded it. Printed in the admin
+    # console so the judgement being applied is visible rather than implied.
+    why: str = ""
+    rule: str = ""
+
+    @property
+    def is_strong(self) -> bool:
+        return self.strength is NarrativeStrength.STRONG
 
     def __str__(self) -> str:
-        return f"[{self.kind.value}] {self.headline} — {self.detail}"
+        return f"[{self.strength.value}/{self.kind.value}] {self.headline} — {self.detail}"
 
 
 @dataclass(frozen=True)

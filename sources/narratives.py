@@ -20,7 +20,14 @@ import io
 from dataclasses import dataclass
 
 import config
-from models import Narrative, NarrativeKind, Player, PlayerSlate
+from models import (
+    Narrative,
+    NarrativeKind,
+    NarrativeStrength,
+    Player,
+    PlayerSlate,
+    Position,
+)
 from sources.odds import strict_name
 from sources.rosters import RostersUnavailable, _download_season, resolve_season
 
@@ -105,6 +112,14 @@ class RosterHistory:
         """Which team a player was on in a given season, if any."""
         return self._stints.get(strict_name(player_name), {}).get(season)
 
+    def tenure(self, player_name: str, team: str) -> int:
+        """How many tracked seasons a player spent on `team`.
+
+        Feeds the revenge grading: a single season is a rental, not a history.
+        """
+        stints = self._stints.get(strict_name(player_name), {})
+        return sum(1 for t in stints.values() if t.upper() == team.upper())
+
     def teammates(self, player_name: str, season: int, team: str) -> set[str]:
         """Everyone on `team` in `season`, excluding the player themselves."""
         squad = set(self._squads.get(season, {}).get(team.upper(), set()))
@@ -144,6 +159,14 @@ def find_revenge(slate: PlayerSlate, history: RosterHistory) -> Narrative | None
         if stint.team == opponent.upper():
             gap = history.current_season - stint.season
             when = "last season" if gap == 1 else f"{gap} seasons ago"
+            tenure = history.tenure(slate.player.name, stint.team)
+
+            strong = (
+                gap <= config.REVENGE_STRONG_MAX_SEASONS_SINCE
+                and tenure >= config.REVENGE_STRONG_MIN_TENURE
+            )
+            plural = "s" if tenure != 1 else ""
+
             return Narrative(
                 kind=NarrativeKind.REVENGE,
                 headline=f"Faces former team {stint.team}",
@@ -151,12 +174,20 @@ def find_revenge(slate: PlayerSlate, history: RosterHistory) -> Narrative | None
                 f"now with {slate.player.team}.",
                 player=slate.player,
                 seasons=(stint.season,),
+                strength=(
+                    NarrativeStrength.STRONG if strong else NarrativeStrength.WEAK
+                ),
+                why=f"left {stint.team} after {tenure} season{plural}; "
+                f"faces them {gap} season{'s' if gap != 1 else ''} later",
+                rule=f"STRONG when the move was within "
+                f"{config.REVENGE_STRONG_MAX_SEASONS_SINCE} season(s) and tenure "
+                f">= {config.REVENGE_STRONG_MIN_TENURE} seasons",
             )
     return None
 
 
 def find_reunion(
-    slate: PlayerSlate, history: RosterHistory, minimum: int = 2
+    slate: PlayerSlate, history: RosterHistory, minimum: int | None = None
 ) -> Narrative | None:
     """A player facing former teammates who have since scattered onto the opponent.
 
@@ -171,6 +202,7 @@ def find_reunion(
     measures practice-squad churn: a sweep of the 2026 roster returned groups of
     seven, made up entirely of players no reader would recognise.
     """
+    minimum = config.REUNION_MIN if minimum is None else minimum
     game = slate.game
     opponent = (
         game.home_team if slate.player.team == game.away_team else game.away_team
@@ -201,13 +233,22 @@ def find_reunion(
     sample = sorted(history.display_name(k) for k in shared)[:3]
     trailing = f", and {len(shared) - len(sample)} more" if len(shared) > len(sample) else ""
 
+    count = len(shared)
     return Narrative(
         kind=NarrativeKind.REUNION,
-        headline=f"{len(shared)} former {team_then} teammate"
-        f"{'s' if len(shared) != 1 else ''} now on {opponent}",
+        headline=f"{count} former {team_then} teammate"
+        f"{'s' if count != 1 else ''} now on {opponent}",
         detail=f"Lined up with {', '.join(sample)}{trailing} on {team_then} in {season}.",
         player=slate.player,
         seasons=(season,),
+        strength=(
+            NarrativeStrength.STRONG
+            if count >= config.REUNION_STRONG_MIN
+            else NarrativeStrength.WEAK
+        ),
+        why=f"{count} skill-position teammates from {team_then} ({season}) "
+        f"now on {opponent}",
+        rule=f"STRONG needs {config.REUNION_STRONG_MIN}+ skill-position teammates",
     )
 
 
@@ -218,6 +259,48 @@ def for_slate(slate: PlayerSlate, history: RosterHistory) -> list[Narrative]:
     """Every story about one player's matchup."""
     found = [detector(slate, history) for detector in DETECTORS]
     return [n for n in found if n is not None]
+
+
+def scan_week(
+    season: int | None = None, week: int | None = None, history: RosterHistory | None = None
+) -> list[tuple[Player, Narrative]]:
+    """Every narrative across every game in a week.
+
+    This is what "across all rosters" requires: detection over the real
+    schedule rather than a hand-built slate. Only skill-position players are
+    scanned — a story about a backup guard is not one anybody will feature.
+    """
+    from sources.schedule import ScheduleUnavailable, current_week, games_for
+
+    history = history or get_history()
+
+    try:
+        if season is None or week is None:
+            season, week = current_week()
+        games = games_for(season, week)
+    except ScheduleUnavailable as exc:
+        raise NarrativesUnavailable(f"Schedule unavailable: {exc}") from exc
+
+    found: list[tuple[Player, Narrative]] = []
+
+    for game in games:
+        for team in (game.home_team, game.away_team):
+            for key in history.roster_now(team):
+                position = history.position(key)
+                if position not in SKILL_POSITIONS:
+                    continue
+                try:
+                    player = Player(key, history.display_name(key), Position(position), team)
+                except ValueError:
+                    continue
+
+                slate = PlayerSlate(player=player, game=game)
+                found.extend((player, n) for n in for_slate(slate, history))
+
+    # Strong before weak, then revenge before reunion.
+    found.sort(key=lambda pair: (not pair[1].is_strong, pair[1].kind.value,
+                                 pair[0].name))
+    return found
 
 
 _HISTORY: RosterHistory | None = None

@@ -69,6 +69,14 @@ ROSTER_SEASON = int(os.environ.get("ROSTER_SEASON", "0")) or None
 # How many seasons of roster history Narrative Street diffs. Three covers the
 # useful window: older stints stop reading as a grudge.
 NARRATIVE_LOOKBACK = int(os.environ.get("NARRATIVE_LOOKBACK", "3"))
+
+# Strength thresholds. A one-year rental carries no grudge and a move three
+# seasons back has gone stale, so a revenge game is only strong when it is both
+# recent and earned. Tunable without touching the detection logic.
+REVENGE_STRONG_MAX_SEASONS_SINCE = 1   # left last season
+REVENGE_STRONG_MIN_TENURE = 2          # after at least two seasons there
+REUNION_MIN = 2                        # fewer than this is not reported at all
+REUNION_STRONG_MIN = 3                 # this many or more is a strong story
 SPLITS_SCORING = os.environ.get("SPLITS_SCORING", "ppr")  # "ppr" or "standard"
 
 # Downloaded season files land here; each is several MB, so they are cached

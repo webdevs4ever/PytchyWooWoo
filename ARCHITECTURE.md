@@ -39,7 +39,9 @@ Output is a CLI report today. A dashboard is planned (see below).
 | `sources/injuries.py` | Weekly injury report from nflverse — **implemented** |
 | `sources/rosters.py` | Jersey numbers and roster status from nflverse — **implemented** |
 | `sources/narratives.py` | Narrative Street — revenge games and reunions from roster history |
-| `sources/comp.py` | Comp Mode — lineup optimizer, upload parser, and diff |
+| `sources/comp.py` | Comp Mode — optimizer, upload parser, diff, and decision markers |
+| `sources/serve.py` | Local web server for the upload flow (localhost only) |
+| `sources/schedule.py` | Weekly schedule from nflverse — who plays whom |
 
 ### A note on `sources/`
 
@@ -94,6 +96,7 @@ game rather than per player.
 | nflverse (`player_stats_{season}.csv`) | Defensive splits, nflfastR-derived. Free, no key | `SplitsUnavailable` → matchup flags skipped |
 | nflverse (`injuries_{season}.csv`) | Official injury report, for QA | `InjuriesUnavailable` → QA warning, pipeline continues |
 | nflverse (`roster_{season}.csv`) | Jersey numbers and roster status | `RostersUnavailable` → cards fall back to position |
+| nflverse (`games.csv`) | Schedule, kickoff times, and roof type | `ScheduleUnavailable` → narratives cannot scan league-wide |
 | The Odds API | Player props → projections. Free tier ~500 req/month | Falls back to salary-export season averages |
 | DK / FD contest CSV exports | Salaries and salary caps. User-downloaded | No export → no value flags for that platform |
 
@@ -157,9 +160,32 @@ far — ingestion, rules, QA, dashboard — is groundwork for these.
 
 ### 1. Comp Mode — **built**
 
-A user uploads a lineup and sees it against the optimal one, with injury and
-weather alerts on their own picks. `python -m sources.comp lineups/week1.txt
---platform draftkings`.
+Upload a lineup in the browser and see it marked, then compared against the
+optimal one.
+
+    python -m sources.serve      # http://127.0.0.1:8765
+    python -m sources.comp lineups/week1.txt --platform draftkings
+
+The flow, as specified:
+
+    upload -> decisioning engine -> admin overrides and featured picks -> output
+
+The admin layer sits between the engine and the output, so the engine never gets
+the last word.
+
+**Decision markers.** One status glyph per slot, stacking with the story marker
+because a player can carry both:
+
+| | Meaning |
+| --- | --- |
+| `✓` | Active, no concerns |
+| `?` | Questionable or doubtful |
+| `✕` | Ruled out — will score zero |
+| `📣` | Featured narrative |
+
+**The server is a view, not a second implementation.** `sources/serve.py` runs
+the same `comp.py` functions the CLI does; it parses an upload and renders the
+result. Localhost only, stdlib `http.server`, no new dependency.
 
 **The optimizer is exact.** Positional requirements and the cap interact, so a
 greedy pick cannot be trusted — and in fact both greedy strategies tested
@@ -180,6 +206,8 @@ version; the gap between them is the cost of the illusion.
 salary export is a stale season average, not the zero they will score, so
 dropping them can display as a point loss. Those swaps carry a note saying so.
 
+- *Narrative markers* come from the admin layer, never recomputed at render
+  time. The engine detects every story; only promoted ones earn a bullhorn.
 - *Roster rules* live in `config.LINEUPS` as `LineupRules`, versioned alongside
   scoring because both change when a platform revises its game. Neither main
   slate includes a kicker; both run nine slots with one RB/WR/TE flex.
@@ -195,6 +223,21 @@ seasons of `roster_{season}.csv` and detects two kinds:
 - **Revenge game** — a player faces a team they were on in a prior season.
 - **Reunion** — a player faces former teammates who have since scattered onto
   the opponent.
+
+**Detection is league-wide; curation is yours.** `scan_week()` runs over the
+real schedule — every game, every skill-position player — and grades each story
+`STRONG` or `WEAK`. `admin.py narratives` prints all of them with the reasoning
+and the rule that graded them, so the judgement being applied is visible rather
+than implied. Featuring is a root-only write, audit-logged like every other
+correction. There is no hard cap: the grading does the filtering and the call is
+yours.
+
+Thresholds live in `config.py`:
+
+- **Revenge** — STRONG when the move was within 1 season *and* tenure was 2+
+  seasons. A one-year rental carries no grudge; a three-year-old move has gone
+  stale.
+- **Reunion** — STRONG at 3+ skill-position former teammates, WEAK at 2.
 
 **`Narrative` is deliberately not a `Flag`.** A flag says something that should
 change a lineup decision; a narrative says something that makes a game worth
@@ -416,7 +459,9 @@ contract, so a redesign touches `dashboard.py` only.
 8. ~~Dashboard — the card grid, consuming `manager.build_view()`~~ — done
 9. ~~Narrative Street~~ — done
 10. ~~Comp Mode~~ — done
-11. Head-to-head quiz game — **not started, gated on approval**
+11. ~~Comp Mode upload, markers, and narrative curation~~ — done
+12. Backtest against historical salary exports — waiting on files
+13. Head-to-head quiz game — **not started, gated on approval**
 
 ## Known gaps
 
@@ -440,5 +485,9 @@ contract, so a redesign touches `dashboard.py` only.
   not a count, and allocating it between rushing and receiving is ambiguous.
   Projections currently carry yards, receptions, and passing TDs only, so
   TD-dependent players are undervalued.
+- **International games use the home team's US coordinates.** The schedule
+  carries a stadium name but no lat/lon, so a neutral-site game falls back to
+  the listed home venue. Harmless while such games are roofed (weather is
+  skipped), wrong if an outdoor one appears.
 - **Salary exports are manual.** Someone has to download the weekly CSVs into
   `salaries/`. Without them there are no value flags.

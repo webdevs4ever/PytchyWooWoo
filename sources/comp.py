@@ -448,6 +448,100 @@ def game_from_info(info: str, home_fallback: str | None = None) -> Game | None:
     return Game(f"{away}-{home}", home, away, kickoff, venue)
 
 
+# --- Decisioning markers ----------------------------------------------------
+
+MARK_ACTIVE = "\u2713"        # check
+MARK_QUESTIONABLE = "?"
+MARK_OUT = "\u2715"           # cross
+MARK_STORY = "\U0001F4E3"     # bullhorn
+
+
+@dataclass
+class MarkedPlayer:
+    """One lineup slot with its decision markers.
+
+    Markers stack: a player can carry a story and an injury at once, and
+    collapsing them to one glyph would hide whichever lost.
+    """
+
+    entry: LineupEntry
+    status: str = "active"          # active | questionable | out
+    featured: bool = False
+    note: str = ""
+
+    @property
+    def markers(self) -> str:
+        glyph = {
+            "out": MARK_OUT,
+            "questionable": MARK_QUESTIONABLE,
+        }.get(self.status, MARK_ACTIVE)
+        return (MARK_STORY + " " if self.featured else "") + glyph
+
+
+def mark_lineup(lineup: Lineup) -> list[MarkedPlayer]:
+    """Assign a status and story marker to every slot.
+
+    Featured narratives come from the admin layer rather than being recomputed
+    here — the engine detects every story, but only the ones promoted in
+    `admin.py` earn a bullhorn.
+    """
+    import overrides as ov
+
+    from sources.odds import strict_name
+
+    try:
+        from sources.injuries import InjuriesUnavailable, fetch_status
+    except ImportError:  # pragma: no cover
+        fetch_status = None
+
+    featured = set(ov.load().featured)
+    marked: list[MarkedPlayer] = []
+
+    for entry in lineup.entries:
+        status, note = "active", ""
+
+        if fetch_status is not None:
+            try:
+                report = fetch_status(entry.player.name)
+            except InjuriesUnavailable:
+                report = None
+            if report is not None:
+                if report.is_ruled_out:
+                    status = "out"
+                    note = f"ruled OUT — {report.primary_injury or 'no detail'}"
+                elif report.is_doubtful:
+                    status = "questionable"
+                    note = f"doubtful — {report.primary_injury or 'no detail'}"
+                elif report.is_questionable:
+                    status = "questionable"
+                    note = f"questionable — {report.primary_injury or 'no detail'}"
+
+        marked.append(
+            MarkedPlayer(
+                entry=entry,
+                status=status,
+                featured=strict_name(entry.player.name) in featured,
+                note=note,
+            )
+        )
+
+    return marked
+
+
+def format_marked(marked: list[MarkedPlayer], title: str, cap: int) -> str:
+    total_points = round(sum(m.entry.projected_points for m in marked), 2)
+    total_salary = sum(m.entry.salary for m in marked)
+    lines = [f"{title}  —  {total_points} proj, ${total_salary:,} of ${cap:,}", ""]
+    for mark in marked:
+        entry = mark.entry
+        lines.append(
+            f"  {mark.markers:<4} {entry.slot:5} {entry.player.name:24} "
+            f"{entry.player.team:4} ${entry.salary:>6,}  {entry.projected_points:5.1f}"
+            + (f"   {mark.note}" if mark.note else "")
+        )
+    return "\n".join(lines)
+
+
 # --- CLI --------------------------------------------------------------------
 
 
@@ -562,6 +656,13 @@ def main(argv: list[str] | None = None) -> int:
     if not args.no_alerts:
         annotate(comparison)
 
+    print(format_marked(mark_lineup(user), "Your lineup", rules.salary_cap))
+    print()
+    print(format_marked(mark_lineup(optimal), "Optimized lineup", rules.salary_cap))
+    print()
+    print(f"{MARK_ACTIVE} active   {MARK_QUESTIONABLE} questionable   "
+          f"{MARK_OUT} out   {MARK_STORY} narrative street")
+    print()
     print(format_comparison(comparison))
     return 0
 

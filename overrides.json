@@ -1,7 +1,10 @@
 {
   "version": 1,
-  "updated_at": "2026-09-06T02:46:46+00:00",
+  "updated_at": "2026-09-06T20:03:25+00:00",
   "players": {},
+  "featured": [
+    "kirkcousins"
+  ],
   "history": [
     {
       "at": "2026-09-06T02:46:08+00:00",
@@ -67,6 +70,16 @@
       "detail": {
         "team": "XXX",
         "display_name": "Patrick Mahomes"
+      }
+    },
+    {
+      "at": "2026-09-06T20:03:25+00:00",
+      "by": "rasfreem",
+      "action": "feature",
+      "key": "kirkcousins",
+      "detail": {
+        "kind": "revenge",
+        "strength": "strong"
       }
     }
   ]

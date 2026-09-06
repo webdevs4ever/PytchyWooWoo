@@ -260,6 +260,118 @@ def cmd_audit(limit: int = 20) -> int:
     return 0
 
 
+def _slate_narratives():
+    """Every narrative across every game this week, strongest first.
+
+    Scans the real schedule rather than a hand-built slate — the judgement is
+    yours "across all rosters", so the list has to actually span them.
+    """
+    from sources.narratives import NarrativesUnavailable, scan_week
+
+    try:
+        return scan_week()
+    except NarrativesUnavailable as exc:
+        print(f"  ! {exc}", file=sys.stderr)
+        return []
+
+
+def cmd_narratives(strong_only: bool = False) -> int:
+    """List every narrative with its grading and the rule that produced it."""
+    from sources.odds import strict_name
+
+    overrides = ov.load()
+    detected = _slate_narratives()
+    strong = [pair for pair in detected if pair[1].is_strong]
+    found = strong if strong_only else detected
+
+    if not found:
+        print("No narratives detected on this slate.")
+        return 0
+
+    # Count against everything detected, not the filtered view — reporting the
+    # filtered total as "detected" made a full slate look empty.
+    shown = f", showing {len(found)}" if strong_only else ""
+    print(f"{len(detected)} narrative(s) detected across the week "
+          f"({len(strong)} strong{shown}). Featured ones carry a bullhorn "
+          f"on the board.\n")
+
+    limit = 40
+    for player, narrative in found[:limit]:
+        key = strict_name(player.name)
+        mark = "FEATURED" if overrides.is_featured(key) else "        "
+        print(f"  {mark}  {narrative.strength.value.upper():6}  "
+              f"{player.name} ({player.team}) — {narrative.kind.value}")
+        print(f"            {narrative.headline}")
+        print(f"            why:  {narrative.why}")
+        print(f"            rule: {narrative.rule}")
+        print()
+
+    if len(found) > limit:
+        print(f"  ... {len(found) - limit} more, weaker. Narrow with --strong.\n")
+
+    featured = len(overrides.featured)
+    print(f"{featured} featured. Promote with: admin.py feature \"Player Name\"")
+    return 0
+
+
+def cmd_feature(name: str, assume_yes: bool = False) -> int:
+    require_root()
+
+    key = _strict(name)
+    if not key:
+        print("A player name is required.", file=sys.stderr)
+        return 1
+
+    overrides = ov.load()
+    if overrides.is_featured(key):
+        print(f"{name} is already featured.")
+        return 0
+
+    # No hard cap: the strength grading does the filtering, and the call is
+    # yours. A count is printed so a crowded board is at least visible.
+    match = next(
+        (pair for pair in _slate_narratives() if _strict(pair[0].name) == key), None
+    )
+    if match is None:
+        print(f"No narrative detected for {name!r} on this slate.")
+        return 1
+
+    player, narrative = match
+    print(f"\n{player.name} ({player.team}) — {narrative.strength.value.upper()}")
+    print(f"  {narrative.headline}")
+    print(f"  why: {narrative.why}")
+    if not _confirm("\nFeature this narrative?", assume_yes):
+        print("Cancelled. Nothing written.")
+        return 1
+
+    overrides.featured.append(key)
+    _record(overrides, "feature", key, {"kind": narrative.kind.value,
+                                        "strength": narrative.strength.value})
+    _write(overrides)
+    print(f"Featured. {len(overrides.featured)} narrative(s) now on the board.")
+    return 0
+
+
+def cmd_unfeature(name: str, assume_yes: bool = False) -> int:
+    require_root()
+
+    key = _strict(name)
+    overrides = ov.load()
+    if not overrides.is_featured(key):
+        print(f"{name} is not featured.")
+        return 1
+
+    if not _confirm(f"Remove {name} from the board?", assume_yes):
+        print("Cancelled. Nothing written.")
+        return 1
+
+    overrides.featured.remove(key)
+    _record(overrides, "unfeature", key, {})
+    _write(overrides)
+    print(f"Removed. {len(overrides.featured)} narrative(s) remain featured.")
+    return 0
+
+
 def cmd_status() -> int:
     """Run-level health, moved here from the dashboard.
 
@@ -330,6 +442,7 @@ Admin console — manual data corrections
   5  audit log
   6  check overrides against upstream
   7  slate status
+  8  narratives — review and feature
   q  quit
 """
 
@@ -372,6 +485,8 @@ def interactive() -> int:
             cmd_check()
         elif choice == "7":
             cmd_status()
+        elif choice == "8":
+            cmd_narratives()
         else:
             print(MENU)
 
@@ -406,6 +521,18 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("check", help="validate overrides against upstream")
     sub.add_parser("status", help="slate health: players, flags, and QA counts")
+    p_narr = sub.add_parser(
+        "narratives", help="every detected narrative, with grading and rule"
+    )
+    p_narr.add_argument("--strong", action="store_true", help="strong narratives only")
+
+    p_feature = sub.add_parser("feature", help="promote a narrative to the board")
+    p_feature.add_argument("name")
+    p_feature.add_argument("-y", "--yes", action="store_true")
+
+    p_unfeature = sub.add_parser("unfeature", help="remove a narrative from the board")
+    p_unfeature.add_argument("name")
+    p_unfeature.add_argument("-y", "--yes", action="store_true")
 
     args = parser.parse_args(argv)
 
@@ -426,6 +553,12 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_check()
         if args.command == "status":
             return cmd_status()
+        if args.command == "narratives":
+            return cmd_narratives(strong_only=args.strong)
+        if args.command == "feature":
+            return cmd_feature(args.name, assume_yes=args.yes)
+        if args.command == "unfeature":
+            return cmd_unfeature(args.name, assume_yes=args.yes)
     except NotRoot as exc:
         print(f"Refused: {exc}", file=sys.stderr)
         return 2

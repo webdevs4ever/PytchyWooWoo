@@ -468,6 +468,10 @@ class MarkedPlayer:
     status: str = "active"          # active | questionable | out
     featured: bool = False
     note: str = ""
+    # Why each glyph was assigned, surfaced when the marker is clicked. Keeping
+    # the reasoning attached to the decision is the point: a marker nobody can
+    # interrogate is just a colour.
+    logic: list[str] = field(default_factory=list)
 
     @property
     def markers(self) -> str:
@@ -499,29 +503,70 @@ def mark_lineup(lineup: Lineup) -> list[MarkedPlayer]:
 
     for entry in lineup.entries:
         status, note = "active", ""
+        logic: list[str] = []
 
         if fetch_status is not None:
             try:
                 report = fetch_status(entry.player.name)
             except InjuriesUnavailable:
                 report = None
-            if report is not None:
+            if report is None:
+                logic.append(
+                    "✓ active — not listed on the injury report for any tracked week"
+                )
+            else:
+                detail = report.primary_injury or "no detail given"
+                practice = report.practice_status or "not reported"
                 if report.is_ruled_out:
                     status = "out"
-                    note = f"ruled OUT — {report.primary_injury or 'no detail'}"
+                    note = f"ruled OUT — {detail}"
+                    logic.append(
+                        f"✕ ruled out — report status \"Out\" in week {report.week} "
+                        f"({detail}). A player ruled out scores zero, so the "
+                        f"optimizer excludes them from the benchmark entirely."
+                    )
                 elif report.is_doubtful:
                     status = "questionable"
-                    note = f"doubtful — {report.primary_injury or 'no detail'}"
+                    note = f"doubtful — {detail}"
+                    logic.append(
+                        f"? doubtful — report status \"Doubtful\" in week "
+                        f"{report.week} ({detail}). Practice: {practice}."
+                    )
                 elif report.is_questionable:
                     status = "questionable"
-                    note = f"questionable — {report.primary_injury or 'no detail'}"
+                    note = f"questionable — {detail}"
+                    logic.append(
+                        f"? questionable — report status \"Questionable\" in week "
+                        f"{report.week} ({detail}). Practice: {practice}."
+                    )
+                else:
+                    logic.append(
+                        f"✓ active — on the week {report.week} report with no game "
+                        f"designation. Practice: {practice}."
+                    )
+        else:
+            logic.append("✓ active — injury report unavailable, assumed active")
+
+        is_featured = strict_name(entry.player.name) in featured
+        if is_featured:
+            logic.append(
+                "📣 narrative street — promoted in the admin console. The engine "
+                "detects every story; only featured ones appear here."
+            )
+
+        logic.append(
+            f"Projection {entry.projected_points:.1f} and salary "
+            f"${entry.salary:,} come from the contest export, refined by player "
+            f"props when ODDS_API_KEY is set."
+        )
 
         marked.append(
             MarkedPlayer(
                 entry=entry,
                 status=status,
-                featured=strict_name(entry.player.name) in featured,
+                featured=is_featured,
                 note=note,
+                logic=logic,
             )
         )
 

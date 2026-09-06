@@ -80,20 +80,30 @@ button{align-self:flex-start;padding:11px 26px;border:0;cursor:pointer;
   background:var(--brand);color:#fff;font:inherit;font-weight:800;
   text-transform:uppercase;letter-spacing:0.09em;font-size:12px}
 button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-.card{margin-top:26px;background:var(--surface);border:1px solid var(--edge);
+.compare{display:grid;gap:18px;margin-top:26px;
+  grid-template-columns:repeat(auto-fit,minmax(330px,1fr))}
+.card{background:var(--surface);border:1px solid var(--edge);
   border-top:3px solid var(--card-accent,var(--edge))}
 .card h2{margin:0;padding:15px 18px;border-bottom:1px solid var(--edge);
   font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:0.1em}
 .tot{font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);
   font-size:12px;margin-left:8px;font-variant-numeric:tabular-nums}
-.slotrow{display:grid;grid-template-columns:56px 52px 1fr auto auto;gap:12px;
-  align-items:baseline;padding:10px 18px;font-size:13.5px;
-  font-variant-numeric:tabular-nums}
-.slotrow+.slotrow{border-top:1px solid var(--edge)}
+.slotrow{border-top:1px solid var(--edge)}
+.slotrow:first-of-type{border-top:0}
+.slotrow>summary{display:grid;grid-template-columns:60px 46px 1fr auto;gap:10px;
+  align-items:baseline;padding:10px 16px;font-size:13px;cursor:pointer;
+  font-variant-numeric:tabular-nums;list-style:none}
+.slotrow>summary::-webkit-details-marker{display:none}
+.slotrow>summary:hover{background:var(--surface-2)}
+.slotrow>summary:focus-visible{outline:2px solid var(--gold);outline-offset:-2px}
 .mk{font-size:15px;letter-spacing:2px}
 .mk[data-tone=ok]{color:var(--ok)}
 .mk[data-tone=warn]{color:var(--warn)}
 .mk[data-tone=bad]{color:var(--bad)}
+.why{margin:0;padding:2px 16px 14px 76px;background:var(--surface-2);
+  font-size:11.5px;line-height:1.55;color:var(--muted)}
+.why li{margin-bottom:6px}
+.hint{font-size:11px;color:var(--dim);padding:10px 16px 0}
 .slot{font-size:10.5px;color:var(--muted);text-transform:uppercase;
   letter-spacing:0.09em}
 .who b{font-weight:700}
@@ -151,28 +161,32 @@ def _render_lineup(marked, title: str, cap: int, accent: str) -> str:
         entry = mark.entry
         tone = STATUS_TONE.get(mark.status, "ok")
         note = f'<span class="note">{html.escape(mark.note)}</span>' if mark.note else ""
+        # <details> keeps the reveal keyboard-accessible and needs no script.
+        why = "".join(f"<li>{html.escape(line)}</li>" for line in mark.logic)
         rows.append(
-            f'<div class="slotrow">'
+            f'<details class="slotrow"><summary>'
             f'<span class="mk" data-tone="{tone}">{mark.markers}</span>'
             f'<span class="slot">{html.escape(entry.slot)}</span>'
             f'<span class="who"><b>{html.escape(entry.player.name)}</b> '
             f'<span class="slot">{html.escape(entry.player.team)}</span>{note}</span>'
-            f"<span>${entry.salary:,}</span>"
             f"<span>{entry.projected_points:.1f}</span>"
-            f"</div>"
+            f'</summary><ul class="why">{why}</ul></details>'
         )
     return (
         f'<section class="card" style="--card-accent:{accent}">'
         f"<h2>{html.escape(title)}<span class=\"tot\">{points} proj · "
         f"${salary:,} of ${cap:,}</span></h2>"
+        f'<p class="hint">Click any row to see why its marker was assigned.</p>'
         f'{"".join(rows)}</section>'
     )
 
 
 def _render_result(comparison, user_marked, optimal_marked, rules) -> str:
     parts = [
-        _render_lineup(user_marked, "Your lineup", rules.salary_cap, "var(--gold)"),
-        _render_lineup(optimal_marked, "Optimized lineup", rules.salary_cap, "var(--brand)"),
+        '<div class="compare">'
+        + _render_lineup(user_marked, "Your lineup", rules.salary_cap, "var(--gold)")
+        + _render_lineup(optimal_marked, "Optimized", rules.salary_cap, "var(--brand)")
+        + "</div>",
         f'<p class="legend"><span>{MARK_ACTIVE} active</span>'
         f"<span>{MARK_QUESTIONABLE} questionable</span>"
         f"<span>{MARK_OUT} ruled out</span>"

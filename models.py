@@ -81,9 +81,20 @@ class Player:
     name: str
     position: Position
     team: str
+    number: int | None = None  # jersey number, shown on dashboard cards
 
     def __str__(self) -> str:
         return f"{self.name} ({self.position.value}, {self.team})"
+
+    @property
+    def initials(self) -> str:
+        """Two-letter monogram for the card avatar, e.g. 'Josh Allen' -> 'JA'."""
+        parts = [p for p in self.name.replace(".", " ").split() if p]
+        if not parts:
+            return "??"
+        if len(parts) == 1:
+            return parts[0][:2].upper()
+        return (parts[0][0] + parts[-1][0]).upper()
 
 
 @dataclass(frozen=True)

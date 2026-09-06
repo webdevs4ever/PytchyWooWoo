@@ -27,6 +27,8 @@ Output is a CLI report today. A dashboard is planned (see below).
 | `models.py` | `Player`, `Game`, `Venue`, `WeatherCondition`, `MatchupSplit`, `Pricing`, `StatLine`, `ScoringRules`, `Flag`, `PlayerSlate` |
 | `rules.py` | `check_*` functions and `evaluate()` |
 | `qa.py` | Data-quality validation — `Issue`, `QAReport`, `validate()` |
+| `manager.py` | Versioned scoring rules and the dashboard view model |
+| `developer.py` | Release gates — secret scan, imports, smoke test — plus commit/push |
 | `sources/weather.py` | NWS forecast at kickoff — **implemented** |
 | `sources/splits.py` | Defensive splits per position, from nflverse — **implemented** |
 | `sources/odds.py` | DK/FanDuel salary and projection — **implemented** |
@@ -125,8 +127,8 @@ Three roles:
 | Agent | Owns |
 | --- | --- |
 | **QA Agent** | Verification. Current player alerts, injury status, and empty or malformed stat sets that would break the UI. **Implemented as `qa.py`** — a plain validation module, not a scheduled agent. Scheduled runs and CI wrapping come later. |
-| **Developer Agent** | Builds and pushes code. |
-| **Manager Agent** | The UI, and keeping game rules current as platforms change scoring and pricing. |
+| **Developer Agent** | Builds and pushes code. **Implemented as `developer.py`.** |
+| **Manager Agent** | The UI, and keeping game rules current as platforms change scoring and pricing. **Implemented as `manager.py`.** |
 
 ### `qa.py` — the validation layer
 
@@ -160,12 +162,48 @@ which is exactly the class of defect this layer exists to catch.
 Run standalone (`python qa.py`, exit 1 on errors) or inline (`main.py --qa`,
 `--qa-strict` to abort before the report).
 
+### `manager.py` — rules and presentation
+
+Owns the two things that change for reasons outside this codebase.
+
+**Scoring rules are versioned, not hardcoded.** `RULE_HISTORY` holds each
+platform's rules with an effective date; `active_rules(platform, on)` looks them
+up by the date being scored. A single current rule set would silently misvalue
+every historical comparison the day a platform revises scoring, with no record of
+what changed. Entries are append-only — editing one makes past scoring
+unreproducible. `validate_rule_sets()` catches duplicate effective dates, invalid
+caps, and rule sets unreviewed for three years or more.
+
+**The view model is built here, not in the UI.** `build_view()` returns a
+JSON-serializable payload of `PlayerCard`s — initials, number, matchup, accent
+colour by worst flag severity, pricing per platform, and any QA issues attached
+to that player. A player with an `injury.out` issue comes back `playable: false`.
+This keeps presentation out of the rules engine and gives any future dashboard
+one contract to consume.
+
+### `developer.py` — release gates
+
+Owns the path from working tree to pushed commit. Five gates run before anything
+is written: forbidden paths, secret scan, module imports, an offline smoke test,
+and rule-set validation.
+
+**Pushing is never implicit.** `commit()` and `push()` default to `dry_run=True`
+and require an explicit opt-in. A module that can silently publish eventually
+publishes something it shouldn't.
+
+The secret scanner exists because it already caught something real — a personal
+email hardcoded as a default User-Agent, one command short of being published.
+It allowlists deliberate placeholders so it stays quiet in normal use.
+
 ## Planned: Dashboard
 
 A player-card grid replacing the CLI printout: dark background, orange-bordered
 cards, circular gradient avatar with initials, name, and number. Design is
 established; the reference mockup uses NBA players and will be converted to NFL.
-Blocked on nothing — it can proceed in parallel once the CLI output stabilizes.
+
+The data contract already exists — `manager.build_view()` returns exactly the
+shape the cards need, including `initials` and `accent`. What remains is the
+rendering layer and a source of jersey numbers, which no current feed provides.
 
 ## Build order
 
@@ -175,7 +213,8 @@ Blocked on nothing — it can proceed in parallel once the CLI output stabilizes
 4. ~~`sources/splits.py` and its check~~ — done
 5. ~~`sources/odds.py`~~ — done
 6. ~~QA validation (`qa.py`)~~ — done
-7. Developer and Manager agents — next
+7. ~~Developer and Manager modules~~ — done
+8. Dashboard — the card grid, consuming `manager.build_view()`
 
 ## Known gaps
 

@@ -122,17 +122,16 @@ def check_price_value(slate: PlayerSlate) -> list[Flag]:
 
     for platform, pricing in slate.pricing.items():
         ppk = pricing.points_per_thousand
-        label = platform.value
-
         if ppk >= config.VALUE_GOOD_PPK:
             flags.append(
                 Flag(
                     code="value.underpriced",
                     severity=Severity.INFO,
-                    reason=f"{label}: ${pricing.salary:,} for {pricing.projected_points:.1f} "
+                    reason=f"${pricing.salary:,} for {pricing.projected_points:.1f} "
                     f"proj = {ppk:.2f} pts/$1k (good value)",
                     player=slate.player,
                     game=slate.game,
+                    platform=platform,
                 )
             )
         elif ppk <= config.VALUE_POOR_PPK:
@@ -140,10 +139,11 @@ def check_price_value(slate: PlayerSlate) -> list[Flag]:
                 Flag(
                     code="value.overpriced",
                     severity=Severity.WARNING,
-                    reason=f"{label}: ${pricing.salary:,} for {pricing.projected_points:.1f} "
+                    reason=f"${pricing.salary:,} for {pricing.projected_points:.1f} "
                     f"proj = {ppk:.2f} pts/$1k (poor value)",
                     player=slate.player,
                     game=slate.game,
+                    platform=platform,
                 )
             )
 

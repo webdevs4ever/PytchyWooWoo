@@ -140,6 +140,9 @@ class Flag:
     reason: str
     player: Player | None = None
     game: Game | None = None
+    # Set when a flag is true of one platform only, so a platform-scoped view
+    # can filter it. Cross-platform and platform-neutral flags leave it None.
+    platform: Platform | None = None
 
     def __str__(self) -> str:
         subject = self.player.name if self.player else (str(self.game) if self.game else "-")

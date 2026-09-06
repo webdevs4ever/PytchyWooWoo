@@ -239,6 +239,7 @@ correct value with a stale one.
 | `admin.py set "Name" --number 14 --note "why"` | Create or replace |
 | `admin.py remove "Name"` | Delete |
 | `admin.py audit` | Change log — who, when, what |
+| `admin.py status` | Slate health: players, flags, QA counts, per-position breakdown |
 | `admin.py check` | Validate corrections against upstream |
 
 ### `developer.py` — release gates
@@ -274,22 +275,33 @@ deliberate departures — the card carries flags, per-platform pricing, and QA
 issues the mockup had no room for; and severity drives the card edge, so the
 orange border means something rather than being decorative.
 
-**Status: pending design review.** The current render departs from the approved
-direction and has not been signed off. Deferred, not settled. The departures to
-revisit, in the order they were introduced:
+**Five cards, one per position group.** Quarterbacks, Running Backs, Wide
+Receivers, Kickers, Defense — grouped rather than one tile per player, so the
+board reads as a lineup instead of a wall. A group's edge colour takes the worst
+severity among its members, so the card summarises what is inside it.
 
-1. **Card density.** The mockup showed avatar, name, and number. The render adds
-   flags with reasons, per-platform pricing rows, and inline QA issues. Likely
-   too busy for a grid meant to be scanned.
-2. **Card-edge colour encodes severity.** The mockup had every card
-   orange-bordered as a constant identity element. Here the border is driven by
-   worst flag severity, so most cards render muted blue-violet. If the orange
-   edge should be constant, severity needs another home — a corner pip, a
-   background wash, or a dedicated chip.
-3. **Display face.** The mockup's condensed grotesque is not embedded. Font CDNs
+**Sportsbook toggle.** Both platforms' salaries and per-platform flags are
+rendered, and a segmented control scopes the view to one at a time. Filtering is
+CSS on a root `data-platform` attribute, so switching is instant and the page
+stays a single static file with no refetch. Flags carry a `platform` field —
+None means the flag is true regardless of book, so weather and matchup flags
+show under both.
+
+**Run-level counts live in the admin console, not here.** `admin.py status`
+reports players, flags, and QA counts. Someone reading the board wants to know
+which players to pick; how many notices the last run produced is operator
+information.
+
+**Status: pending design review.** Still not signed off against the original
+direction. Open items:
+
+1. **Display face.** The mockup's condensed grotesque is not embedded. Font CDNs
    are blocked in the publish target and no licensed file is vendored, so the
    page uses a heavy system stack with tight tracking. Close in silhouette, not
    the same face. Naming the font and vendoring it as a data URI resolves this.
+2. **Card-edge colour encodes severity** rather than being a constant orange
+   identity element as in the mockup. If the orange edge should be constant,
+   severity needs another home.
 
 `manager.build_view()` is unaffected by any of these — the payload is a data
 contract, so a redesign touches `dashboard.py` only.

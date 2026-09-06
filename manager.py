@@ -23,7 +23,7 @@ from datetime import date, datetime, timezone
 import config
 import qa
 import rules
-from models import Flag, Platform, PlayerSlate, ScoringRules, Severity
+from models import Flag, Platform, PlayerSlate, Position, ScoringRules, Severity
 
 # --- Rule versioning --------------------------------------------------------
 
@@ -139,9 +139,19 @@ SEVERITY_ACCENT = {
 NEUTRAL_ACCENT = "#3f4c8c"
 
 
+# The five groups the dashboard shows, in lineup order.
+POSITION_GROUPS: list[tuple[Position, str]] = [
+    (Position.QB, "Quarterbacks"),
+    (Position.RB, "Running Backs"),
+    (Position.WR, "Wide Receivers"),
+    (Position.K, "Kickers"),
+    (Position.DST, "Defense"),
+]
+
+
 @dataclass
-class PlayerCard:
-    """One dashboard card. Mirrors the mockup: avatar initials, name, number."""
+class PlayerRow:
+    """One player within a position group."""
 
     player_id: str
     name: str
@@ -158,6 +168,20 @@ class PlayerCard:
     playable: bool = True
 
 
+@dataclass
+class PositionCard:
+    """One dashboard card: a position group and the players in it."""
+
+    position: str
+    label: str
+    accent: str
+    players: list[dict] = field(default_factory=list)
+
+    @property
+    def count(self) -> int:
+        return len(self.players)
+
+
 def _worst_severity(flags: list[Flag]) -> Severity | None:
     for severity in (Severity.CRITICAL, Severity.WARNING, Severity.INFO):
         if any(flag.severity is severity for flag in flags):
@@ -165,8 +189,8 @@ def _worst_severity(flags: list[Flag]) -> Severity | None:
     return None
 
 
-def build_card(slate: PlayerSlate, issues: list[qa.Issue] | None = None) -> PlayerCard:
-    """Turn one slate into a render-ready card."""
+def build_row(slate: PlayerSlate, issues: list[qa.Issue] | None = None) -> PlayerRow:
+    """Turn one slate into a render-ready player row."""
     issues = issues or []
     flags = rules.evaluate(slate)
     severity = _worst_severity(flags)
@@ -183,7 +207,7 @@ def build_card(slate: PlayerSlate, issues: list[qa.Issue] | None = None) -> Play
 
     mine = [i for i in issues if i.subject == slate.player.name]
 
-    return PlayerCard(
+    return PlayerRow(
         player_id=slate.player.player_id,
         name=slate.player.name,
         initials=slate.player.initials,
@@ -194,7 +218,14 @@ def build_card(slate: PlayerSlate, issues: list[qa.Issue] | None = None) -> Play
         accent=SEVERITY_ACCENT.get(severity, NEUTRAL_ACCENT) if severity else NEUTRAL_ACCENT,
         conditions=conditions,
         flags=[
-            {"code": f.code, "severity": f.severity.value, "reason": f.reason} for f in flags
+            {
+                "code": f.code,
+                "severity": f.severity.value,
+                "reason": f.reason,
+                # None means the flag is true regardless of platform.
+                "platform": f.platform.value if f.platform else None,
+            }
+            for f in flags
         ],
         pricing=[
             {
@@ -213,15 +244,47 @@ def build_card(slate: PlayerSlate, issues: list[qa.Issue] | None = None) -> Play
     )
 
 
+_SEVERITY_RANK = {Severity.CRITICAL: 0, Severity.WARNING: 1, Severity.INFO: 2}
+
+
 def build_view(slates: list[PlayerSlate], run_qa: bool = True) -> dict:
-    """The full dashboard payload: cards plus run-level metadata."""
+    """The full dashboard payload: one card per position group, plus metadata.
+
+    Grouping by position rather than by player keeps the board to five cards, so
+    it reads as a lineup rather than a wall of tiles.
+    """
     report = qa.validate(slates) if run_qa else qa.QAReport([])
 
-    cards = [build_card(slate, report.issues) for slate in slates]
+    rows_by_position: dict[str, list[PlayerRow]] = {}
+    for slate in slates:
+        row = build_row(slate, report.issues)
+        rows_by_position.setdefault(row.position, []).append(row)
+
+    cards: list[PositionCard] = []
+    for position, label in POSITION_GROUPS:
+        rows = rows_by_position.get(position.value, [])
+        rows.sort(key=lambda r: r.name)
+
+        # The group takes the accent of its most severe member, so a card's
+        # edge summarises what is inside it.
+        severities = [
+            Severity(f["severity"]) for row in rows for f in row.flags
+        ]
+        worst = min(severities, key=lambda s: _SEVERITY_RANK[s], default=None)
+
+        cards.append(
+            PositionCard(
+                position=position.value,
+                label=label,
+                accent=SEVERITY_ACCENT.get(worst, NEUTRAL_ACCENT) if worst else NEUTRAL_ACCENT,
+                players=[asdict(row) for row in rows],
+            )
+        )
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "splits_season": config.SPLITS_SEASON,
+        "platforms": [p.value for p in Platform],
         "scoring": {
             platform.value: {
                 "salary_cap": active_rules(platform).salary_cap,
@@ -229,11 +292,14 @@ def build_view(slates: list[PlayerSlate], run_qa: bool = True) -> dict:
             }
             for platform in Platform
         },
+        # Retained for the admin console; the dashboard no longer surfaces it.
         "quality": {
             "ok": report.ok,
             "errors": len(report.errors),
             "warnings": len(report.warnings),
             "notices": len(report.notices),
+            "players": len(slates),
+            "flags": sum(len(row.flags) for rows in rows_by_position.values() for row in rows),
         },
         "cards": [asdict(card) for card in cards],
     }

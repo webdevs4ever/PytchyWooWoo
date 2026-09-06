@@ -260,6 +260,51 @@ def cmd_audit(limit: int = 20) -> int:
     return 0
 
 
+def cmd_status() -> int:
+    """Run-level health, moved here from the dashboard.
+
+    These counts are operator information — how much of the slate resolved and
+    how much of it is degraded. A person reading the board wants to know which
+    players to pick, not how many notices the last run produced.
+    """
+    import main as pipeline
+    import manager
+
+    slates = pipeline.build_demo_slates()
+    pipeline.enrich_with_rosters(slates, quiet=True)
+    pipeline.enrich_with_weather(slates, quiet=True)
+    pipeline.enrich_with_splits(slates, quiet=True)
+    pipeline.enrich_with_pricing(slates, quiet=True)
+
+    view = manager.build_view(slates)
+    q = view["quality"]
+
+    print("Slate status\n")
+    for label, value in [
+        ("Players", q["players"]),
+        ("Flags", q["flags"]),
+        ("Errors", q["errors"]),
+        ("Warnings", q["warnings"]),
+        ("Notices", q["notices"]),
+    ]:
+        print(f"  {label:10} {value:>4}")
+
+    print(f"\n  Splits season   {view['splits_season']}")
+    for name, values in sorted(view["scoring"].items()):
+        print(f"  {name:15} ${values['salary_cap']:,} cap, "
+              f"{values['points_per_reception']} PPR")
+
+    print("\nBy position\n")
+    for card in view["cards"]:
+        priced = sum(1 for r in card["players"] if r["pricing"])
+        flags = sum(len(r["flags"]) for r in card["players"])
+        print(f"  {card['label']:16} {len(card['players']):>2} player(s), "
+              f"{priced} priced, {flags} flag(s)")
+
+    print(f"\n{'OK' if q['ok'] else 'ERRORS PRESENT — see qa.py'}")
+    return 0 if q["ok"] else 1
+
+
 def cmd_check() -> int:
     """Validate corrections against upstream."""
     issues = ov.validate()
@@ -282,6 +327,7 @@ Admin console — manual data corrections
   4  remove an override
   5  audit log
   6  check overrides against upstream
+  7  slate status
   q  quit
 """
 
@@ -322,6 +368,8 @@ def interactive() -> int:
             cmd_audit()
         elif choice == "6":
             cmd_check()
+        elif choice == "7":
+            cmd_status()
         else:
             print(MENU)
 
@@ -355,6 +403,7 @@ def main(argv: list[str] | None = None) -> int:
     p_audit.add_argument("--limit", type=int, default=20)
 
     sub.add_parser("check", help="validate overrides against upstream")
+    sub.add_parser("status", help="slate health: players, flags, and QA counts")
 
     args = parser.parse_args(argv)
 
@@ -373,6 +422,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_audit(args.limit)
         if args.command == "check":
             return cmd_check()
+        if args.command == "status":
+            return cmd_status()
     except NotRoot as exc:
         print(f"Refused: {exc}", file=sys.stderr)
         return 2

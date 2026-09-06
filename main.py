@@ -47,14 +47,21 @@ def build_demo_slates() -> list[PlayerSlate]:
     sf_at_gb = game("2026-W1-SF-GB", "GB", "SF")
 
     roster = [
+        # QB
         ("mahomes", "Patrick Mahomes", Position.QB, "KC", buf_at_kc),
         ("allen", "Josh Allen", Position.QB, "BUF", buf_at_kc),
-        ("stbrown", "Amon-Ra St. Brown", Position.WR, "DET", bal_at_det),
-        ("tucker", "Justin Tucker", Position.K, "BAL", bal_at_det),
-        ("hurts", "Jalen Hurts", Position.QB, "PHI", dal_at_phi),
-        ("lamb", "CeeDee Lamb", Position.WR, "DAL", dal_at_phi),
+        # RB
         ("mccaffrey", "Christian McCaffrey", Position.RB, "SF", sf_at_gb),
-        ("love", "Jordan Love", Position.QB, "GB", sf_at_gb),
+        ("barkley", "Saquon Barkley", Position.RB, "PHI", dal_at_phi),
+        # WR
+        ("stbrown", "Amon-Ra St. Brown", Position.WR, "DET", bal_at_det),
+        ("lamb", "CeeDee Lamb", Position.WR, "DAL", dal_at_phi),
+        # K
+        ("butker", "Harrison Butker", Position.K, "KC", buf_at_kc),
+        ("tucker", "Justin Tucker", Position.K, "BAL", bal_at_det),
+        # DST
+        ("bal_dst", "Ravens D/ST", Position.DST, "BAL", bal_at_det),
+        ("sf_dst", "49ers D/ST", Position.DST, "SF", sf_at_gb),
     ]
 
     return [

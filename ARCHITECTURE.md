@@ -33,6 +33,7 @@ Output is a CLI report today. A dashboard is planned (see below).
 | `sources/splits.py` | Defensive splits per position, from nflverse — **implemented** |
 | `sources/odds.py` | DK/FanDuel salary and projection — **implemented** |
 | `sources/injuries.py` | Weekly injury report from nflverse — **implemented** |
+| `sources/rosters.py` | Jersey numbers and roster status from nflverse — **implemented** |
 
 ## Cross-cutting concerns
 
@@ -64,6 +65,7 @@ game rather than per player.
 | NWS API (`api.weather.gov`) | Kickoff forecast. Free, no key, needs User-Agent | `WeatherUnavailable` → weather flags skipped |
 | nflverse (`player_stats_{season}.csv`) | Defensive splits, nflfastR-derived. Free, no key | `SplitsUnavailable` → matchup flags skipped |
 | nflverse (`injuries_{season}.csv`) | Official injury report, for QA | `InjuriesUnavailable` → QA warning, pipeline continues |
+| nflverse (`roster_{season}.csv`) | Jersey numbers and roster status | `RostersUnavailable` → cards fall back to position |
 | The Odds API | Player props → projections. Free tier ~500 req/month | Falls back to salary-export season averages |
 | DK / FD contest CSV exports | Salaries and salary caps. User-downloaded | No export → no value flags for that platform |
 
@@ -87,6 +89,20 @@ converts them under each platform's own system. The same 6.5 rec / 104.5 yd line
 is 23.55 on DraftKings and 17.30 on FanDuel — full vs half PPR plus DK's
 100-yard bonus. Reading a single "projected points" number from one source would
 erase exactly the divergence Comps Mode exists to find.
+
+**NFL.com was rejected as a source.** It publishes no developer API, so using
+it would mean scraping — brittle, against their terms, and the only such
+dependency in an otherwise clean list. nflverse carries jersey numbers and
+roster status under the same free, no-auth terms as the splits and injury feeds.
+
+**Two name keys, deliberately.** `normalize_name` collapses to
+first-initial-plus-last, which is required to join nflverse's `P.Mahomes` to a
+salary export's `Patrick Mahomes`. It is far too lossy for rosters: four players
+in the 2026 file reduce to `a.brown`, two of them on Detroit, and the naive
+lookup returned Aamaris Brown (#24 DB) for Amon-Ra St. Brown (#14 WR).
+`strict_name` keeps the full name and is used wherever both sides have one.
+Ambiguous lookups return None rather than guessing — a wrong jersey number
+renders confidently, which is worse than a missing one.
 
 **Retractable roofs count as domes.** When closed the forecast is moot, and
 treating them as indoor is the safer default for flagging.
@@ -202,8 +218,9 @@ cards, circular gradient avatar with initials, name, and number. Design is
 established; the reference mockup uses NBA players and will be converted to NFL.
 
 The data contract already exists — `manager.build_view()` returns exactly the
-shape the cards need, including `initials` and `accent`. What remains is the
-rendering layer and a source of jersey numbers, which no current feed provides.
+shape the cards need: `initials`, `number`, `accent`, pricing, flags, and
+per-player QA issues. Jersey numbers now come from `sources/rosters.py`. Only the
+rendering layer remains.
 
 ## Build order
 
@@ -221,6 +238,8 @@ rendering layer and a source of jersey numbers, which no current feed provides.
 - **Split data lags one season.** nflverse has no published `player_stats_2025`
   or `_2026` asset yet, so `SPLITS_SEASON` defaults to 2024. Bump it (or pass
   `--season`) once the current season is published.
+- **Kickers have no roster entry when released.** `roster.not_found` fires for
+  them, which is correct but indistinguishable from a misspelling.
 - **Kickers and defenses have no splits.** They are absent from the weekly
   player stats used here, so `fetch_split` returns None for them and matchup
   flags are silently skipped.

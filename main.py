@@ -16,8 +16,11 @@ from datetime import datetime, timedelta, timezone
 
 import config
 import rules
+from dataclasses import replace
 from models import Game, Player, PlayerSlate, Position
 from sources.odds import OddsUnavailable, get_book
+from sources.rosters import RostersUnavailable
+from sources.rosters import get_book as get_roster_book
 from sources.splits import SplitsUnavailable, fetch_split
 from sources.weather import WeatherUnavailable, fetch_forecast
 
@@ -73,6 +76,21 @@ def enrich_with_weather(slates: list[PlayerSlate], quiet: bool = False) -> None:
                     print(f"  ! weather unavailable for {slate.game}: {exc}", file=sys.stderr)
                 cache[game_id] = None
         slate.weather = cache[game_id]
+
+
+def enrich_with_rosters(slates: list[PlayerSlate], quiet: bool = False) -> None:
+    """Attach jersey numbers from the roster feed, in place."""
+    try:
+        book = get_roster_book()
+    except RostersUnavailable as exc:
+        if not quiet:
+            print(f"  ! rosters unavailable: {exc}", file=sys.stderr)
+        return
+
+    for slate in slates:
+        entry = book.entry_for(slate.player.name, slate.player.team)
+        if entry and entry.jersey_number:
+            slate.player = replace(slate.player, number=entry.jersey_number)
 
 
 def opponent_of(slate: PlayerSlate) -> str:
@@ -132,7 +150,8 @@ def report(slates: list[PlayerSlate]) -> int:
                 f"{w.precipitation_chance:.0%} precip — {w.description}"
             )
 
-        print(f"\n{slate.player}  —  {slate.game}")
+        number = f"#{slate.player.number} " if slate.player.number else ""
+        print(f"\n{number}{slate.player}  —  {slate.game}")
         if conditions:
             print(conditions)
 
@@ -155,6 +174,11 @@ def main(argv: list[str] | None = None) -> int:
         "--no-splits",
         action="store_true",
         help="skip the nflverse splits download (useful offline)",
+    )
+    parser.add_argument(
+        "--no-rosters",
+        action="store_true",
+        help="skip the roster download (jersey numbers unavailable)",
     )
     parser.add_argument(
         "--no-pricing",
@@ -190,6 +214,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.season is not None:
         config.SPLITS_SEASON = args.season
 
+    if not args.no_rosters:
+        enrich_with_rosters(slates, quiet=args.quiet)
     if not args.no_weather:
         enrich_with_weather(slates, quiet=args.quiet)
     if not args.no_splits:

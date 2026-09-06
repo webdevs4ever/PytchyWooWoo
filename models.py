@@ -272,3 +272,23 @@ class InjuryStatus:
     def __str__(self) -> str:
         detail = self.primary_injury or self.practice_status or "no detail"
         return f"{self.report_status or 'listed'} ({detail})"
+
+
+@dataclass(frozen=True)
+class RosterEntry:
+    """A player's roster record: identity, team, number, and standing."""
+
+    player_name: str
+    team: str
+    position: str
+    jersey_number: int | None = None
+    status: str = ""
+
+    @property
+    def is_active(self) -> bool:
+        """True for players on the active roster.
+
+        nflverse uses 'ACT' for active; reserve, practice squad, and injured
+        designations carry their own codes.
+        """
+        return self.status.strip().upper() in {"ACT", "ACTIVE", ""}

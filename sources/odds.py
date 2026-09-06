@@ -74,6 +74,20 @@ def normalize_name(name: str) -> str:
     return f"{parts[0][0].lower()}.{parts[-1].lower()}"
 
 
+def strict_name(name: str) -> str:
+    """A full-name key, for sources that carry complete names on both sides.
+
+    `normalize_name` collapses to first-initial-plus-last, which is necessary to
+    join nflverse's 'P.Mahomes' to a salary export's 'Patrick Mahomes' — but it
+    is far too lossy where full names are available. Four players in the 2026
+    roster reduce to 'a.brown', two of them on Detroit. Use this instead
+    wherever both sides have full names.
+    """
+    cleaned = re.sub(r"[^a-zA-Z\s]", "", name or "").lower()
+    parts = [p for p in cleaned.split() if p and p not in _SUFFIXES]
+    return "".join(parts)
+
+
 # --- Salary exports ---------------------------------------------------------
 
 

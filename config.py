@@ -59,6 +59,12 @@ NFLVERSE_INJURY_URL = (
     "https://github.com/nflverse/nflverse-data/releases/download/injuries"
 )
 INJURY_SEASON = int(os.environ.get("INJURY_SEASON", "0")) or None
+
+# Rosters supply jersey numbers for the dashboard and roster status for QA.
+NFLVERSE_ROSTER_URL = (
+    "https://github.com/nflverse/nflverse-data/releases/download/rosters"
+)
+ROSTER_SEASON = int(os.environ.get("ROSTER_SEASON", "0")) or None
 SPLITS_SCORING = os.environ.get("SPLITS_SCORING", "ppr")  # "ppr" or "standard"
 
 # Downloaded season files land here; each is several MB, so they are cached

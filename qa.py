@@ -354,6 +354,77 @@ def check_injury(slate: PlayerSlate) -> list[Issue]:
     return []
 
 
+def check_roster_status(slate: PlayerSlate) -> list[Issue]:
+    """Confirm the player is on a current roster, with the team we think.
+
+    A player who was cut, traded, or is on the practice squad will still price
+    and score in the salary export, so this is the check that catches a lineup
+    slot that cannot produce.
+    """
+    try:
+        from sources.rosters import RostersUnavailable, fetch_entry
+    except ImportError:  # pragma: no cover
+        return []
+
+    try:
+        entry = fetch_entry(slate.player.name, slate.player.team)
+    except RostersUnavailable as exc:
+        return [
+            Issue(
+                IssueLevel.WARNING,
+                "roster.unavailable",
+                f"roster could not be loaded: {exc}",
+                slate.player.name,
+            )
+        ]
+
+    if entry is None:
+        return [
+            Issue(
+                IssueLevel.WARNING,
+                "roster.not_found",
+                "not on any current roster, or the name is ambiguous — "
+                "may be retired, released, or misspelled",
+                slate.player.name,
+            )
+        ]
+
+    issues: list[Issue] = []
+
+    if entry.team != slate.player.team:
+        issues.append(
+            Issue(
+                IssueLevel.WARNING,
+                "roster.team_mismatch",
+                f"listed on {entry.team}, slate says {slate.player.team} — "
+                "traded or stale data",
+                slate.player.name,
+            )
+        )
+
+    if not entry.is_active:
+        issues.append(
+            Issue(
+                IssueLevel.WARNING,
+                "roster.inactive",
+                f"roster status is {entry.status!r}, not active — may not play",
+                slate.player.name,
+            )
+        )
+
+    if entry.jersey_number is None:
+        issues.append(
+            Issue(
+                IssueLevel.NOTICE,
+                "roster.no_number",
+                "no jersey number on file — card will fall back to position",
+                slate.player.name,
+            )
+        )
+
+    return issues
+
+
 # --- Environment ------------------------------------------------------------
 
 
@@ -481,6 +552,7 @@ def validate(
             issues.extend(check(slate))
         if include_injuries:
             issues.extend(check_injury(slate))
+            issues.extend(check_roster_status(slate))
 
     issues.sort(key=lambda i: (_LEVEL_ORDER[i.level], i.subject, i.code))
     return QAReport(issues)

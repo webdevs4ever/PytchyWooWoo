@@ -148,6 +148,64 @@ aggregation choices and makes the PPR/standard switch a one-line config change.
 **Season files are cached to `.cache/`.** Each is several MB, and re-downloading
 per run would be wasteful and rude to the host.
 
+## Product features
+
+The three features this app is for, as defined 2026-09-06. Everything built so
+far — ingestion, rules, QA, dashboard — is groundwork for these.
+
+### 1. Comp Mode
+
+A user uploads their own lineups and sees them compared against an ideal lineup,
+and against injury and weather flags.
+
+This refines the Comps Mode note in `handoff2.md`, which described generating an
+optimal lineup per platform. The addition is the **upload and diff**: the user's
+actual lineup is the subject, and the optimal one is the benchmark.
+
+- *Have:* per-platform scoring and salary caps (`sources/manager.py`), value and
+  divergence flags (`rules.py`), injury and weather flags.
+- *Need:* a lineup upload parser, an optimizer (best lineup under each
+  platform's cap and roster constraints), and a diff view — which slots differ,
+  what each swap costs or gains.
+- *Blocked on:* real salary exports. An optimizer with no salaries has nothing
+  to optimize over.
+- *Note:* the optimizer is a constrained knapsack, not a sort. Positional
+  requirements and the cap interact, so a greedy pick by points-per-dollar will
+  not produce the optimal lineup.
+
+### 2. Narrative Street
+
+Surfaces stories rather than statistics: ex-teammates facing each other,
+recently traded players up against their former team.
+
+- *Have:* everything needed. Diffing `roster_{season}.csv` across seasons yields
+  team changes — 681 players moved between 2025 and 2026 — and the schedule
+  supplies who is playing whom. Both narrative types fall out of that:
+  - *Revenge game:* player changed teams and faces their former team.
+  - *Reunion:* two players who shared a roster in a prior season now on
+    opposing sides.
+- *Need:* `sources/narratives.py` for the roster-history diff, and narrative
+  rules alongside the existing checks.
+- *Blocked on:* nothing.
+- *Note:* narratives are colour, not signal. They should be visually distinct
+  from flags on the board, or they will read as things that affect scoring.
+
+### 3. Head-to-head quiz game
+
+**Not to be built. Ask before starting.**
+
+A cartoon-styled 1v1 game quizzing players on the previous week's fantasy
+results.
+
+- *Have:* weekly results are already ingested — `player_stats_{season}.csv`
+  carries per-week fantasy points, which is a question bank.
+- *Need:* question generation, game and turn state, an opponent (human or
+  scripted), and a full visual treatment.
+- *Open questions before any build:* who the opponent is, whether state persists
+  between sessions, and where the cartoon art comes from — that is a
+  commissioned asset problem, not a code one, and it defines the feature's look
+  more than any of the logic does.
+
 ## Planned: Comps Mode
 
 Optimize separately for each platform rather than producing one shared lineup:

@@ -93,6 +93,11 @@ button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .slotrow>summary{display:grid;grid-template-columns:60px 46px 1fr auto;gap:10px;
   align-items:baseline;padding:10px 16px;font-size:13px;cursor:pointer;
   font-variant-numeric:tabular-nums;list-style:none}
+/* Optimized card mirrors the user card, so the glyph columns sit on the
+   outside edges and the two lineups read against a shared centre gutter. */
+.card[data-glyphs=right] .slotrow>summary{grid-template-columns:46px 1fr auto 60px}
+.card[data-glyphs=right] .mk{text-align:right}
+.card[data-glyphs=right] .why{padding-left:16px;padding-right:76px}
 .slotrow>summary::-webkit-details-marker{display:none}
 .slotrow>summary:hover{background:var(--surface-2)}
 .slotrow>summary:focus-visible{outline:2px solid var(--gold);outline-offset:-2px}
@@ -153,7 +158,9 @@ def _form(platform: str = Platform.DRAFTKINGS.value) -> str:
 </form>"""
 
 
-def _render_lineup(marked, title: str, cap: int, accent: str) -> str:
+def _render_lineup(
+    marked, title: str, cap: int, accent: str, glyphs: str = "left"
+) -> str:
     points = round(sum(m.entry.projected_points for m in marked), 2)
     salary = sum(m.entry.salary for m in marked)
     rows = []
@@ -163,17 +170,20 @@ def _render_lineup(marked, title: str, cap: int, accent: str) -> str:
         note = f'<span class="note">{html.escape(mark.note)}</span>' if mark.note else ""
         # <details> keeps the reveal keyboard-accessible and needs no script.
         why = "".join(f"<li>{html.escape(line)}</li>" for line in mark.logic)
-        rows.append(
-            f'<details class="slotrow"><summary>'
-            f'<span class="mk" data-tone="{tone}">{mark.markers}</span>'
+        glyph = f'<span class="mk" data-tone="{tone}">{mark.markers}</span>'
+        body = (
             f'<span class="slot">{html.escape(entry.slot)}</span>'
             f'<span class="who"><b>{html.escape(entry.player.name)}</b> '
             f'<span class="slot">{html.escape(entry.player.team)}</span>{note}</span>'
             f"<span>{entry.projected_points:.1f}</span>"
-            f'</summary><ul class="why">{why}</ul></details>'
+        )
+        cells = body + glyph if glyphs == "right" else glyph + body
+        rows.append(
+            f'<details class="slotrow"><summary>{cells}</summary>'
+            f'<ul class="why">{why}</ul></details>'
         )
     return (
-        f'<section class="card" style="--card-accent:{accent}">'
+        f'<section class="card" data-glyphs="{glyphs}" style="--card-accent:{accent}">'
         f"<h2>{html.escape(title)}<span class=\"tot\">{points} proj · "
         f"${salary:,} of ${cap:,}</span></h2>"
         f'<p class="hint">Click any row to see why its marker was assigned.</p>'
@@ -185,7 +195,9 @@ def _render_result(comparison, user_marked, optimal_marked, rules) -> str:
     parts = [
         '<div class="compare">'
         + _render_lineup(user_marked, "Your lineup", rules.salary_cap, "var(--gold)")
-        + _render_lineup(optimal_marked, "Optimized", rules.salary_cap, "var(--brand)")
+        + _render_lineup(
+            optimal_marked, "Optimized", rules.salary_cap, "var(--brand)", glyphs="right"
+        )
         + "</div>",
         f'<p class="legend"><span>{MARK_ACTIVE} active</span>'
         f"<span>{MARK_QUESTIONABLE} questionable</span>"

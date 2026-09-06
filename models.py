@@ -158,6 +158,8 @@ class PlayerSlate:
     weather: WeatherCondition | None = None
     split: MatchupSplit | None = None
     pricing: dict[Platform, Pricing] = field(default_factory=dict)
+    # Colour, not signal — never consumed by the rules engine.
+    narratives: list["Narrative"] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -295,3 +297,27 @@ class RosterEntry:
         designations carry their own codes.
         """
         return self.status.strip().upper() in {"ACT", "ACTIVE", ""}
+
+
+class NarrativeKind(str, Enum):
+    REVENGE = "revenge"    # facing a former team
+    REUNION = "reunion"    # facing former teammates
+
+
+@dataclass(frozen=True)
+class Narrative:
+    """A story about a matchup, not a signal about it.
+
+    Kept deliberately separate from `Flag`. A flag says something that should
+    change a lineup decision; a narrative says something that makes the game
+    worth watching. Conflating them would put colour where signal belongs.
+    """
+
+    kind: NarrativeKind
+    headline: str
+    detail: str
+    player: Player | None = None
+    seasons: tuple[int, ...] = ()
+
+    def __str__(self) -> str:
+        return f"[{self.kind.value}] {self.headline} — {self.detail}"

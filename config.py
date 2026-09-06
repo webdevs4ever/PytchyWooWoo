@@ -65,6 +65,10 @@ NFLVERSE_ROSTER_URL = (
     "https://github.com/nflverse/nflverse-data/releases/download/rosters"
 )
 ROSTER_SEASON = int(os.environ.get("ROSTER_SEASON", "0")) or None
+
+# How many seasons of roster history Narrative Street diffs. Three covers the
+# useful window: older stints stop reading as a grudge.
+NARRATIVE_LOOKBACK = int(os.environ.get("NARRATIVE_LOOKBACK", "3"))
 SPLITS_SCORING = os.environ.get("SPLITS_SCORING", "ppr")  # "ppr" or "standard"
 
 # Downloaded season files land here; each is several MB, so they are cached

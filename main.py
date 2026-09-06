@@ -19,6 +19,7 @@ import rules
 from dataclasses import replace
 from models import Game, Player, PlayerSlate, Position
 from sources.odds import OddsUnavailable, get_book
+from sources.narratives import NarrativesUnavailable, for_slate, get_history
 from sources.rosters import RostersUnavailable
 from sources.rosters import get_book as get_roster_book
 from sources.splits import SplitsUnavailable, fetch_split
@@ -42,26 +43,27 @@ def build_demo_slates() -> list[PlayerSlate]:
         )
 
     buf_at_kc = game("2026-W1-BUF-KC", "KC", "BUF")
+    lv_at_atl = game("2026-W1-LV-ATL", "ATL", "LV")
+    no_at_jax = game("2026-W1-NO-JAX", "JAX", "NO")
+    min_at_pit = game("2026-W1-MIN-PIT", "PIT", "MIN")
     bal_at_det = game("2026-W1-BAL-DET", "DET", "BAL")
-    dal_at_phi = game("2026-W1-DAL-PHI", "PHI", "DAL")
-    sf_at_gb = game("2026-W1-SF-GB", "GB", "SF")
 
+    # Chosen to exercise every position group and both narrative types.
     roster = [
         # QB
         ("mahomes", "Patrick Mahomes", Position.QB, "KC", buf_at_kc),
         ("allen", "Josh Allen", Position.QB, "BUF", buf_at_kc),
+        ("cousins", "Kirk Cousins", Position.QB, "LV", lv_at_atl),
         # RB
-        ("mccaffrey", "Christian McCaffrey", Position.RB, "SF", sf_at_gb),
-        ("barkley", "Saquon Barkley", Position.RB, "PHI", dal_at_phi),
+        ("white", "Zamir White", Position.RB, "NO", no_at_jax),
         # WR
+        ("thielen", "Adam Thielen", Position.WR, "MIN", min_at_pit),
         ("stbrown", "Amon-Ra St. Brown", Position.WR, "DET", bal_at_det),
-        ("lamb", "CeeDee Lamb", Position.WR, "DAL", dal_at_phi),
         # K
         ("butker", "Harrison Butker", Position.K, "KC", buf_at_kc),
         ("tucker", "Justin Tucker", Position.K, "BAL", bal_at_det),
         # DST
         ("bal_dst", "Ravens D/ST", Position.DST, "BAL", bal_at_det),
-        ("sf_dst", "49ers D/ST", Position.DST, "SF", sf_at_gb),
     ]
 
     return [
@@ -99,6 +101,19 @@ def enrich_with_weather(slates: list[PlayerSlate], quiet: bool = False) -> None:
                     print(f"  ! weather unavailable for {slate.game}: {exc}", file=sys.stderr)
                 cache[game_id] = None
         slate.weather = cache[game_id]
+
+
+def enrich_with_narratives(slates: list[PlayerSlate], quiet: bool = False) -> None:
+    """Attach matchup stories in place. One history load serves every lookup."""
+    try:
+        history = get_history()
+    except NarrativesUnavailable as exc:
+        if not quiet:
+            print(f"  ! narratives unavailable: {exc}", file=sys.stderr)
+        return
+
+    for slate in slates:
+        slate.narratives = for_slate(slate, history)
 
 
 def opponent_of(slate: PlayerSlate) -> str:
@@ -167,6 +182,8 @@ def report(slates: list[PlayerSlate]) -> int:
             print("  (no flags)")
         for flag in flags:
             print(f"  {flag.severity.value.upper():8} {flag.code:24} {flag.reason}")
+        for story in slate.narratives:
+            print(f"  {'STORY':8} {story.kind.value:24} {story.headline} — {story.detail}")
 
     return total
 
@@ -187,6 +204,11 @@ def main(argv: list[str] | None = None) -> int:
         "--no-rosters",
         action="store_true",
         help="skip the roster download (jersey numbers unavailable)",
+    )
+    parser.add_argument(
+        "--no-narratives",
+        action="store_true",
+        help="skip Narrative Street (roster history download)",
     )
     parser.add_argument(
         "--no-pricing",
@@ -230,6 +252,8 @@ def main(argv: list[str] | None = None) -> int:
         enrich_with_splits(slates, quiet=args.quiet)
     if not args.no_pricing:
         enrich_with_pricing(slates, use_props=not args.no_props, quiet=args.quiet)
+    if not args.no_narratives:
+        enrich_with_narratives(slates, quiet=args.quiet)
 
     if args.qa or args.qa_strict:
         from sources import qa

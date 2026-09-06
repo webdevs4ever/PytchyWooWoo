@@ -175,6 +175,7 @@ class PlayerRow:
     flags: list[dict] = field(default_factory=list)
     pricing: list[dict] = field(default_factory=list)
     issues: list[dict] = field(default_factory=list)
+    narratives: list[dict] = field(default_factory=list)
     playable: bool = True
 
 
@@ -248,6 +249,10 @@ def build_row(slate: PlayerSlate, issues: list[qa.Issue] | None = None) -> Playe
         ],
         issues=[
             {"level": i.level.value, "code": i.code, "message": i.message} for i in mine
+        ],
+        narratives=[
+            {"kind": n.kind.value, "headline": n.headline, "detail": n.detail}
+            for n in slate.narratives
         ],
         # A player ruled out should not render as selectable.
         playable=not any(i.code == "injury.out" for i in mine),

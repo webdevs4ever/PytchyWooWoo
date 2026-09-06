@@ -275,6 +275,7 @@ def cmd_status() -> int:
     pipeline.enrich_with_weather(slates, quiet=True)
     pipeline.enrich_with_splits(slates, quiet=True)
     pipeline.enrich_with_pricing(slates, quiet=True)
+    pipeline.enrich_with_narratives(slates, quiet=True)
 
     view = manager.build_view(slates)
     q = view["quality"]
@@ -298,8 +299,9 @@ def cmd_status() -> int:
     for card in view["cards"]:
         priced = sum(1 for r in card["players"] if r["pricing"])
         flags = sum(len(r["flags"]) for r in card["players"])
+        stories = sum(len(r.get("narratives") or []) for r in card["players"])
         print(f"  {card['label']:16} {len(card['players']):>2} player(s), "
-              f"{priced} priced, {flags} flag(s)")
+              f"{priced} priced, {flags} flag(s), {stories} story(s)")
 
     print(f"\n{'OK' if q['ok'] else 'ERRORS PRESENT — see qa.py'}")
     return 0 if q["ok"] else 1

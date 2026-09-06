@@ -213,6 +213,22 @@ body {
 .price .proj { color: var(--muted); }
 .price .value { margin-left: auto; font-weight: 700; color: var(--brand); }
 
+/* Narratives are colour, not signal. Gold sets them apart from the severity
+   palette entirely, so a story never reads as something affecting a lineup. */
+.stories { display: flex; flex-direction: column; gap: 7px; }
+.story {
+  padding: 8px 11px;
+  border-left: 2px solid var(--gold);
+  background: var(--surface-2);
+}
+.story-kind {
+  display: block;
+  font-size: 9px; font-weight: 800; color: var(--gold);
+  text-transform: uppercase; letter-spacing: 0.12em;
+}
+.story-head { font-size: 12.5px; font-weight: 700; margin-top: 2px; }
+.story-detail { font-size: 11.5px; color: var(--muted); font-style: italic; }
+
 .issues { display: flex; flex-direction: column; gap: 4px; }
 .issue { margin: 0; font-size: 11px; line-height: 1.4; color: var(--muted); }
 .issue b {
@@ -285,6 +301,27 @@ def _render_issues(issues: list[dict]) -> str:
     return f'<div class="issues">{"".join(rows)}</div>'
 
 
+NARRATIVE_LABELS = {"revenge": "Revenge game", "reunion": "Reunion"}
+
+
+def _render_narratives(narratives: list[dict]) -> str:
+    """Stories render outside the flag stack and outside platform scoping —
+    a revenge game is true regardless of which book you are looking at."""
+    if not narratives:
+        return ""
+    rows = []
+    for story in narratives:
+        label = NARRATIVE_LABELS.get(story["kind"], story["kind"])
+        rows.append(
+            f'<div class="story">'
+            f'<span class="story-kind">{_esc(label)}</span>'
+            f'<div class="story-head">{_esc(story["headline"])}</div>'
+            f'<div class="story-detail">{_esc(story["detail"])}</div>'
+            f"</div>"
+        )
+    return f'<div class="stories">{"".join(rows)}</div>'
+
+
 def _render_player(row: dict) -> str:
     badge = '<span class="ruled-out">Out</span>' if not row["playable"] else ""
     conditions = (
@@ -302,6 +339,7 @@ def _render_player(row: dict) -> str:
         f"</div>"
         f"{conditions}"
         f'{_render_flags(row["flags"])}'
+        f'{_render_narratives(row.get("narratives") or [])}'
         f'{_render_pricing(row["pricing"])}'
         f'{_render_issues(row["issues"])}'
         f"</div>"
@@ -405,6 +443,7 @@ def main(argv: list[str] | None = None) -> int:
     pipeline.enrich_with_weather(slates, quiet=True)
     pipeline.enrich_with_splits(slates, quiet=True)
     pipeline.enrich_with_pricing(slates, quiet=True)
+    pipeline.enrich_with_narratives(slates, quiet=True)
 
     Path(args.output).write_text(render(manager.build_view(slates)), encoding="utf-8")
     print(f"Wrote {args.output}")

@@ -38,6 +38,7 @@ Output is a CLI report today. A dashboard is planned (see below).
 | `sources/odds.py` | DK/FanDuel salary and projection — **implemented** |
 | `sources/injuries.py` | Weekly injury report from nflverse — **implemented** |
 | `sources/rosters.py` | Jersey numbers and roster status from nflverse — **implemented** |
+| `sources/narratives.py` | Narrative Street — revenge games and reunions from roster history |
 
 ### A note on `sources/`
 
@@ -173,22 +174,33 @@ actual lineup is the subject, and the optimal one is the benchmark.
   requirements and the cap interact, so a greedy pick by points-per-dollar will
   not produce the optimal lineup.
 
-### 2. Narrative Street
+### 2. Narrative Street — **built**
 
-Surfaces stories rather than statistics: ex-teammates facing each other,
-recently traded players up against their former team.
+Surfaces stories rather than statistics. `sources/narratives.py` diffs three
+seasons of `roster_{season}.csv` and detects two kinds:
 
-- *Have:* everything needed. Diffing `roster_{season}.csv` across seasons yields
-  team changes — 681 players moved between 2025 and 2026 — and the schedule
-  supplies who is playing whom. Both narrative types fall out of that:
-  - *Revenge game:* player changed teams and faces their former team.
-  - *Reunion:* two players who shared a roster in a prior season now on
-    opposing sides.
-- *Need:* `sources/narratives.py` for the roster-history diff, and narrative
-  rules alongside the existing checks.
-- *Blocked on:* nothing.
-- *Note:* narratives are colour, not signal. They should be visually distinct
-  from flags on the board, or they will read as things that affect scoring.
+- **Revenge game** — a player faces a team they were on in a prior season.
+- **Reunion** — a player faces former teammates who have since scattered onto
+  the opponent.
+
+**`Narrative` is deliberately not a `Flag`.** A flag says something that should
+change a lineup decision; a narrative says something that makes a game worth
+watching. Nothing in the rules engine consumes narratives, and on the board they
+render in gold — outside the severity palette entirely — so a story never reads
+as a scoring signal.
+
+Two corrections during the build, both found by checking output rather than
+trusting it:
+
+1. **The first reunion detector was a tautology.** It counted former teammates
+   on the opposing team without excluding the case where the former team *is*
+   the opponent — so a player facing his old club returned "42 former
+   teammates," which is just that club's roster. Reunion now excludes the
+   revenge case; the story is teammates who scattered from a *third* team.
+2. **It then measured practice-squad churn.** A sweep of the 2026 roster
+   returned groups of seven made up of players no reader would recognise.
+   Teammates are now filtered to skill positions, which cut 14,051 matches to
+   405 legible ones.
 
 ### 3. Head-to-head quiz game
 
@@ -389,6 +401,8 @@ contract, so a redesign touches `dashboard.py` only.
 6. ~~QA validation (`qa.py`)~~ — done
 7. ~~Developer and Manager modules~~ — done
 8. ~~Dashboard — the card grid, consuming `manager.build_view()`~~ — done
+9. ~~Narrative Street~~ — done
+10. Comp Mode — blocked on real salary exports
 
 ## Known gaps
 

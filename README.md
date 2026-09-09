@@ -13,6 +13,14 @@ npm run setup     # once
 npm run dev       # http://127.0.0.1:8765
 ```
 
+| Page | URL |
+| --- | --- |
+| Comp Mode — upload and analyze | `http://127.0.0.1:8765/` |
+| Admin console — manual corrections | `http://127.0.0.1:8765/admin` |
+
+`npm run admin` opens the same corrections in the terminal, with narrative
+curation and slate status that the web page does not carry.
+
 That's it. **This is a Python project** — npm is a task runner here and installs
 no JavaScript. `npm run setup` builds a virtualenv and installs one dependency
 (`requests`); `npm run dev` starts the local server.
@@ -69,10 +77,12 @@ Individual players can be corrected or added by hand:
 ```bash
 python admin.py set "James Cook" --salary 9200 --note "underpriced in export"
 python admin.py set "Some Rookie" --position WR --team KC --salary 3200 --projection 9.5
+python admin.py set "James Cook" --salary 4100 --platform fanduel
 ```
 
 A correction carrying a salary for someone absent from the export adds them to
-the pool outright.
+the pool outright. Pricing applies to both platforms unless `--platform` scopes
+it — or use the dropdown at `/admin`.
 
 **`ODDS_API_KEY`** → optional. Salary exports carry a season average, so
 projections work without it; player props only refine them.

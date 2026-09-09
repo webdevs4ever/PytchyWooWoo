@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-09-09T02:32:49+00:00",
+  "updated_at": "2026-09-09T02:36:06+00:00",
   "players": {},
   "featured": [
     "kirkcousins"
@@ -125,6 +125,53 @@
       "key": "jamescook",
       "detail": {
         "salary": 9200,
+        "display_name": "James Cook"
+      }
+    },
+    {
+      "at": "2026-09-09T02:35:16+00:00",
+      "by": "rasfreem",
+      "action": "set",
+      "key": "jamescook",
+      "detail": {
+        "display_name": "James Cook"
+      }
+    },
+    {
+      "at": "2026-09-09T02:35:16+00:00",
+      "by": "rasfreem",
+      "action": "set",
+      "key": "jamescook",
+      "detail": {
+        "display_name": "James Cook"
+      }
+    },
+    {
+      "at": "2026-09-09T02:35:17+00:00",
+      "by": "rasfreem",
+      "action": "remove",
+      "key": "jamescook",
+      "detail": {
+        "display_name": "James Cook"
+      }
+    },
+    {
+      "at": "2026-09-09T02:36:06+00:00",
+      "by": "rasfreem",
+      "action": "set",
+      "key": "jamescook",
+      "detail": {
+        "scope": "fanduel",
+        "salary": 4100,
+        "projected_points": null
+      }
+    },
+    {
+      "at": "2026-09-09T02:36:06+00:00",
+      "by": "rasfreem",
+      "action": "remove",
+      "key": "jamescook",
+      "detail": {
         "display_name": "James Cook"
       }
     }

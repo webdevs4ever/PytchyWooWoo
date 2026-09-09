@@ -210,6 +210,16 @@ def cmd_set(name: str, args, assume_yes: bool = False) -> int:
         print("Cancelled. Nothing written.")
         return 1
 
+    scoped = getattr(args, "platform", None)
+    pricing = dict(existing.pricing) if existing else {}
+    if scoped and ("salary" in changes or "projected_points" in changes):
+        entry = dict(pricing.get(scoped, {}))
+        if changes.get("salary") is not None:
+            entry["salary"] = changes.pop("salary")
+        if changes.get("projected_points") is not None:
+            entry["projected_points"] = changes.pop("projected_points")
+        pricing[scoped] = entry
+
     overrides.players[key] = PlayerOverride(
         key=key,
         display_name=name,
@@ -219,6 +229,7 @@ def cmd_set(name: str, args, assume_yes: bool = False) -> int:
         status=changes.get("status"),
         salary=changes.get("salary"),
         projected_points=changes.get("projected_points"),
+        pricing=pricing,
         note=args.note or (existing.note if existing else ""),
         added_at=_now(),
         added_by=_actor(),
@@ -625,6 +636,11 @@ def main(argv: list[str] | None = None) -> int:
     p_set.add_argument("--salary", type=int, help="override the export's salary")
     p_set.add_argument(
         "--projection", type=float, help="override the export's projected points"
+    )
+    p_set.add_argument(
+        "--platform",
+        choices=["draftkings", "fanduel"],
+        help="scope --salary/--projection to one platform (default: both)",
     )
     p_set.add_argument("--note", help="why this correction exists")
     p_set.add_argument("-y", "--yes", action="store_true", help="skip confirmation")

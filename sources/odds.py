@@ -386,19 +386,19 @@ class PricingBook:
             key = strict_name(candidate.player.name)
             seen.add(key)
             override = corrections.get(key)
-            if override is None or not override.has_pricing():
+            if override is None or not override.has_pricing(platform.value):
                 adjusted.append(candidate)
                 continue
+            salary = override.salary_for(platform.value)
+            projection = override.projection_for(platform.value)
             adjusted.append(
                 Candidate(
                     player=candidate.player,
                     pricing=Pricing(
                         platform,
-                        override.salary
-                        if override.salary is not None
-                        else candidate.pricing.salary,
-                        override.projected_points
-                        if override.projected_points is not None
+                        salary if salary is not None else candidate.pricing.salary,
+                        projection
+                        if projection is not None
                         else candidate.pricing.projected_points,
                     ),
                 )
@@ -406,7 +406,8 @@ class PricingBook:
 
         # A correction can also supply a player the export omits entirely.
         for key, override in corrections.players.items():
-            if key in seen or override.salary is None:
+            salary = override.salary_for(platform.value)
+            if key in seen or salary is None:
                 continue
             try:
                 position = Position((override.position or "").upper())
@@ -418,7 +419,7 @@ class PricingBook:
                         key, override.display_name or key, position, override.team or ""
                     ),
                     pricing=Pricing(
-                        platform, override.salary, override.projected_points or 0.0
+                        platform, salary, override.projection_for(platform.value) or 0.0
                     ),
                 )
             )

@@ -53,6 +53,10 @@ class PlayerOverride:
     status: str | None = None
     salary: int | None = None
     projected_points: float | None = None
+    # Per-platform pricing, when DraftKings and FanDuel need different
+    # corrections for the same player. Falls back to the flat fields above,
+    # which apply to both.
+    pricing: dict[str, dict] = field(default_factory=dict)
     note: str = ""
     added_at: str = ""
     added_by: str = ""
@@ -77,8 +81,19 @@ class PlayerOverride:
             status=self.status or entry.status,
         )
 
-    def has_pricing(self) -> bool:
+    def has_pricing(self, platform: str | None = None) -> bool:
+        if platform and self.pricing.get(platform):
+            return True
         return self.salary is not None or self.projected_points is not None
+
+    def salary_for(self, platform: str) -> int | None:
+        """Platform-specific salary, else the both-platforms value."""
+        scoped = self.pricing.get(platform, {}).get("salary")
+        return scoped if scoped is not None else self.salary
+
+    def projection_for(self, platform: str) -> float | None:
+        scoped = self.pricing.get(platform, {}).get("projected_points")
+        return scoped if scoped is not None else self.projected_points
 
     def as_entry(self) -> RosterEntry:
         """Build an entry from scratch, for a player absent upstream."""
@@ -132,7 +147,7 @@ def _parse(payload: dict) -> Overrides:
 
     players: dict[str, PlayerOverride] = {}
     for key, raw in (payload.get("players") or {}).items():
-        unknown = set(raw) - EDITABLE_FIELDS - {"note", "added_at", "added_by"}
+        unknown = set(raw) - EDITABLE_FIELDS - {"note", "added_at", "added_by", "pricing"}
         if unknown:
             raise OverrideError(
                 f"override {key!r} has unknown field(s): {', '.join(sorted(unknown))}"
@@ -156,6 +171,9 @@ def _parse(payload: dict) -> Overrides:
             status=raw.get("status"),
             salary=salary,
             projected_points=(float(projection) if projection is not None else None),
+            pricing={
+                str(k): dict(v) for k, v in (raw.get("pricing") or {}).items()
+            },
             note=raw.get("note", ""),
             added_at=raw.get("added_at", ""),
             added_by=raw.get("added_by", ""),
@@ -202,6 +220,7 @@ def serialize(overrides: Overrides) -> dict:
                     if o.projected_points is not None
                     else {}
                 ),
+                **({"pricing": o.pricing} if o.pricing else {}),
                 **({"note": o.note} if o.note else {}),
                 **({"added_at": o.added_at} if o.added_at else {}),
                 **({"added_by": o.added_by} if o.added_by else {}),

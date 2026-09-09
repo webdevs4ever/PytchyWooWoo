@@ -41,6 +41,10 @@ from sources.comp import (
     parse_lineup,
 )
 
+NAV = (
+    '<p class="nav"><a href="/">Analyze</a> · <a href="/admin">Admin</a></p>'
+)
+
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 
@@ -124,17 +128,41 @@ button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .swap i{color:var(--muted);font-size:11.5px;display:block}
 .err{margin-top:26px;padding:16px 18px;background:var(--surface);
   border:1px solid var(--bad);border-left:3px solid var(--bad);font-size:13.5px}
+.ok-note{margin-top:26px;padding:16px 18px;background:var(--surface);
+  border:1px solid var(--ok);border-left:3px solid var(--ok);font-size:13.5px}
+.nav{margin:-14px 0 24px;font-size:12px;text-transform:uppercase;
+  letter-spacing:0.1em}
+.nav a{color:var(--muted);text-decoration:none;border-bottom:1px solid transparent}
+.nav a:hover{color:var(--brand);border-bottom-color:var(--brand)}
+table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px;
+  font-variant-numeric:tabular-nums}
+th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.09em;
+  color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--edge)}
+td{padding:8px 10px;border-bottom:1px solid var(--edge)}
+.scope{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;
+  color:var(--gold)}
 """
 
 
-def _page(body: str) -> bytes:
+COMP_HEADING = (
+    '<h1>Comp<span> Mode</span></h1>'
+    '<p class="sub">Upload a lineup. The decisioning engine marks each player, '
+    "then compares your lineup against the optimal one.</p>"
+)
+ADMIN_HEADING = (
+    '<h1>Admin<span> Console</span></h1>'
+    '<p class="sub">Manual corrections over upstream data. These always win — '
+    "nothing downstream second-guesses them.</p>"
+)
+
+
+def _page(body: str, heading: str = COMP_HEADING) -> bytes:
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Comp Mode</title><style>{CSS}</style></head><body>
+<title>Fantasy Bet Helper</title><style>{CSS}</style></head><body>
 <div class="shell">
-<h1>Comp<span> Mode</span></h1>
-<p class="sub">Upload a lineup. The decisioning engine marks each player, then
-compares your lineup against the optimal one.</p>
+{heading}
+{NAV}
 {body}
 </div></body></html>""".encode("utf-8")
 
@@ -242,6 +270,160 @@ def _render_result(comparison, user_marked, optimal_marked, rules) -> str:
     return "".join(parts)
 
 
+# --- Admin ------------------------------------------------------------------
+
+
+def _admin_form(message: str = "") -> str:
+    import overrides as ov
+
+    try:
+        corrections = ov.load()
+    except ov.OverrideError as exc:
+        return f'<div class="err">overrides.json is unreadable: {html.escape(str(exc))}</div>'
+
+    rows = []
+    for key, o in sorted(corrections.players.items()):
+        fields = []
+        if o.salary is not None:
+            fields.append(f"salary ${o.salary:,} <span class='scope'>both</span>")
+        if o.projected_points is not None:
+            fields.append(
+                f"proj {o.projected_points} <span class='scope'>both</span>"
+            )
+        for platform, values in sorted(o.pricing.items()):
+            label = PLATFORM_LABELS.get(platform, platform[:2].upper())
+            if values.get("salary") is not None:
+                fields.append(
+                    f"salary ${values['salary']:,} <span class='scope'>{label}</span>"
+                )
+            if values.get("projected_points") is not None:
+                fields.append(
+                    f"proj {values['projected_points']} <span class='scope'>{label}</span>"
+                )
+        for name in ("team", "position", "status", "jersey_number"):
+            value = getattr(o, name)
+            if value:
+                fields.append(f"{name.replace('_', ' ')} {value}")
+
+        rows.append(
+            f"<tr><td><b>{html.escape(o.display_name or key)}</b></td>"
+            f'<td>{" · ".join(fields) or "—"}</td>'
+            f"<td>{html.escape(o.note)}</td></tr>"
+        )
+
+    table = (
+        "<table><tr><th>Player</th><th>Correction</th><th>Note</th></tr>"
+        + "".join(rows)
+        + "</table>"
+        if rows
+        else '<p class="sub">No corrections yet. Upstream data is used as-is.</p>'
+    )
+
+    options = '<option value="">Both platforms</option>' + "".join(
+        f'<option value="{p.value}">{p.value.title()} only</option>' for p in Platform
+    )
+
+    return f"""{message}
+<form method="post" action="/admin">
+  <div class="row">
+    <div><label for="name">Player</label>
+      <input type="text" id="name" name="name" placeholder="James Cook" required></div>
+    <div><label for="scope">Applies to</label>
+      <select id="scope" name="scope">{options}</select></div>
+  </div>
+  <div class="row">
+    <div><label for="salary">Salary</label>
+      <input type="number" id="salary" name="salary" placeholder="9200"></div>
+    <div><label for="projection">Projected points</label>
+      <input type="number" step="0.1" id="projection" name="projection" placeholder="16.7"></div>
+  </div>
+  <div class="row">
+    <div><label for="position">Position</label>
+      <input type="text" id="position" name="position" placeholder="RB — only needed for a new player"></div>
+    <div><label for="team">Team</label>
+      <input type="text" id="team" name="team" placeholder="BUF"></div>
+  </div>
+  <div><label for="note">Why</label>
+    <input type="text" id="note" name="note" placeholder="underpriced in export"></div>
+  <button type="submit">Save correction</button>
+</form>
+<h2 style="margin-top:32px;font-size:13px;text-transform:uppercase;letter-spacing:0.1em">
+Active corrections</h2>
+{table}"""
+
+
+def _apply_admin(fields: dict[str, str]) -> str:
+    """Write one correction. Same path and audit log as the CLI console."""
+    import admin as console
+    import overrides as ov
+    from overrides import PlayerOverride
+
+    name = (fields.get("name") or "").strip()
+    if not name:
+        return '<div class="err">A player name is required.</div>'
+
+    key = console._strict(name)
+    scope = (fields.get("scope") or "").strip()
+
+    def number(field, cast):
+        raw = (fields.get(field) or "").strip()
+        try:
+            return cast(raw) if raw else None
+        except ValueError:
+            return None
+
+    salary = number("salary", int)
+    projection = number("projection", float)
+    position = (fields.get("position") or "").strip().upper() or None
+    team = (fields.get("team") or "").strip().upper() or None
+
+    if salary is None and projection is None and not position and not team:
+        return '<div class="err">Nothing to set — give a salary, projection, position, or team.</div>'
+
+    corrections = ov.load()
+    existing = corrections.get(key)
+    pricing = dict(existing.pricing) if existing else {}
+
+    flat_salary = existing.salary if existing else None
+    flat_projection = existing.projected_points if existing else None
+
+    if scope:
+        entry = dict(pricing.get(scope, {}))
+        if salary is not None:
+            entry["salary"] = salary
+        if projection is not None:
+            entry["projected_points"] = projection
+        pricing[scope] = entry
+    else:
+        flat_salary = salary if salary is not None else flat_salary
+        flat_projection = projection if projection is not None else flat_projection
+
+    corrections.players[key] = PlayerOverride(
+        key=key,
+        display_name=name,
+        jersey_number=existing.jersey_number if existing else None,
+        team=team or (existing.team if existing else None),
+        position=position or (existing.position if existing else None),
+        status=existing.status if existing else None,
+        salary=flat_salary,
+        projected_points=flat_projection,
+        pricing=pricing,
+        note=(fields.get("note") or "").strip() or (existing.note if existing else ""),
+        added_at=console._now(),
+        added_by=console._actor(),
+    )
+    console._record(
+        corrections,
+        "set",
+        key,
+        {"scope": scope or "both", "salary": salary, "projected_points": projection},
+    )
+    console._write(corrections)
+
+    where = f"{scope.title()} only" if scope else "both platforms"
+    return f'<div class="ok-note">Saved: <b>{html.escape(name)}</b> — {where}.</div>'
+
+
 def _parse_body(handler: BaseHTTPRequestHandler) -> dict[str, str]:
     """Read a form post: multipart when a file is attached, urlencoded otherwise."""
     length = int(handler.headers.get("Content-Length") or 0)
@@ -282,12 +464,19 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(payload)
 
     def do_GET(self) -> None:  # noqa: N802
+        if self.path in ("/admin", "/admin/"):
+            self._send(_page(_admin_form(), ADMIN_HEADING))
+            return
         if self.path not in ("/", "/index.html"):
             self._send(_page('<div class="err">Not found.</div>'), 404)
             return
         self._send(_page(_form()))
 
     def do_POST(self) -> None:  # noqa: N802
+        if self.path in ("/admin", "/admin/"):
+            message = _apply_admin(_parse_body(self))
+            self._send(_page(_admin_form(message), ADMIN_HEADING))
+            return
         if self.path != "/analyze":
             self._send(_page('<div class="err">Not found.</div>'), 404)
             return
@@ -348,7 +537,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     server = HTTPServer((HOST, args.port), Handler)
-    print(f"Comp Mode on http://{HOST}:{args.port}  (ctrl-c to stop)")
+    print(f"Comp Mode     http://{HOST}:{args.port}")
+    print(f"Admin console http://{HOST}:{args.port}/admin")
+    print("(ctrl-c to stop)")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

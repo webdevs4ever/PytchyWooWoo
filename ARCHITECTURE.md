@@ -337,6 +337,7 @@ validation of the rest of the slate. Categories:
 - **Week alignment** — was the player on the *active roster for that week*, and
   is the injury designation from that week
 - **Weather scenarios** — the rules themselves, run across the condition space
+- **Swap legality** — every suggested swap must be a move a person can make
 - **Environment** — stale `SPLITS_SEASON`, missing API key, empty `salaries/`
 
 #### Week alignment
@@ -354,6 +355,22 @@ carried over from week 18 says nothing about week 1. The check reports when the
 designation in use is from a different week than the game.
 
 Both need `Game.season` and `Game.week`, now populated from the schedule.
+
+#### Swap legality
+
+`check_swap_legality` builds a deliberately poor lineup from the real pool,
+compares it against the optimal one, and asserts three things about the result:
+
+1. Every swap is like-for-like, unless marked as a FLEX position change.
+2. A marked position change involves only flex-eligible positions, on a roster
+   that has a flex.
+3. The swap deltas reconcile with the headline gap — a mismatch means the list
+   was truncated.
+
+It exists because the original `compare()` failed all three and nothing caught
+it. Swaps were paired by projected points with position ignored, producing
+suggestions like "drop your quarterback, add a tight end". A user reading the
+output found it; no check did. Reintroducing that logic now raises 11 errors.
 
 #### Weather scenarios
 

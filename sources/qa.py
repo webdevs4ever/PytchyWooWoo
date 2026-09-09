@@ -680,6 +680,170 @@ def check_weather_scenarios() -> list[Issue]:
     return issues
 
 
+# --- Swap legality ----------------------------------------------------------
+
+
+def check_swap_legality() -> list[Issue]:
+    """Every suggested swap must be one a person could actually make.
+
+    A lineup slot accepts one position. The only exception is the FLEX, and
+    those swaps must be labelled rather than left to look like an illegal
+    substitution. This also confirms the swap deltas reconcile with the headline
+    gap, since silently truncating the list makes the two disagree.
+
+    Validates the comparison *logic*, not the data — the sibling of
+    `check_weather_scenarios`.
+    """
+    from models import Platform, Position
+    from sources.comp import CompUnavailable, build_user_lineup, compare, optimize
+    from sources.odds import OddsUnavailable, get_book
+
+    issues: list[Issue] = []
+
+    try:
+        book = get_book(use_props=False)
+    except OddsUnavailable as exc:
+        return [
+            Issue(
+                IssueLevel.NOTICE,
+                "swap.unchecked",
+                f"swap legality not verified: {exc}",
+                "comp rules",
+            )
+        ]
+
+    for platform in Platform:
+        pool = book.pool_for(platform)
+        rules = config.LINEUPS[platform]
+        if not pool:
+            issues.append(
+                Issue(
+                    IssueLevel.NOTICE,
+                    "swap.unchecked",
+                    f"no {platform.value} salary export, so swap legality is unverified",
+                    "comp rules",
+                )
+            )
+            continue
+
+        try:
+            optimal = optimize(pool, rules)
+        except CompUnavailable as exc:
+            issues.append(
+                Issue(
+                    IssueLevel.WARNING,
+                    "swap.no_benchmark",
+                    f"{platform.value}: cannot build an optimal lineup ({exc})",
+                    "comp rules",
+                )
+            )
+            continue
+
+        # Degrade the optimal lineup into a plausible user lineup: keep the
+        # positions, swap in the cheapest player available at each. That
+        # guarantees a full slate of same-position swaps to inspect.
+        by_position: dict[Position, list] = {}
+        for candidate in pool:
+            by_position.setdefault(candidate.player.position, []).append(candidate)
+        for group in by_position.values():
+            group.sort(key=lambda c: c.pricing.salary)
+
+        names: list[str] = []
+        used: set[str] = set()
+        for entry in optimal.entries:
+            for candidate in by_position.get(entry.player.position, []):
+                if candidate.player.name not in used:
+                    names.append(candidate.player.name)
+                    used.add(candidate.player.name)
+                    break
+
+        user, missing = build_user_lineup(names, pool, rules)
+        if missing:
+            issues.append(
+                Issue(
+                    IssueLevel.NOTICE,
+                    "swap.unchecked",
+                    f"{platform.value}: could not assemble a test lineup",
+                    "comp rules",
+                )
+            )
+            continue
+
+        comparison = compare(user, optimal, missing)
+
+        for swap in comparison.swaps:
+            out_position = swap.out_player.position
+            in_position = swap.in_player.position
+
+            if out_position is in_position:
+                if swap.positional:
+                    issues.append(
+                        Issue(
+                            IssueLevel.WARNING,
+                            "swap.mislabelled",
+                            f"{platform.value}: {swap.out_player.name} -> "
+                            f"{swap.in_player.name} is same-position but marked "
+                            "as a FLEX position change",
+                            "comp rules",
+                        )
+                    )
+                continue
+
+            if not swap.positional:
+                issues.append(
+                    Issue(
+                        IssueLevel.ERROR,
+                        "swap.illegal",
+                        f"{platform.value}: {out_position.value} "
+                        f"{swap.out_player.name} -> {in_position.value} "
+                        f"{swap.in_player.name} is not a move that can be made",
+                        "comp rules",
+                    )
+                )
+                continue
+
+            # A labelled position change is only legal if both ends are
+            # flex-eligible and the roster actually has a flex.
+            if not rules.flex_count:
+                issues.append(
+                    Issue(
+                        IssueLevel.ERROR,
+                        "swap.no_flex",
+                        f"{platform.value}: position change suggested on a roster "
+                        "with no FLEX slot",
+                        "comp rules",
+                    )
+                )
+            elif not {out_position, in_position} <= rules.flex_eligible:
+                ineligible = sorted(
+                    p.value for p in {out_position, in_position} - rules.flex_eligible
+                )
+                issues.append(
+                    Issue(
+                        IssueLevel.ERROR,
+                        "swap.flex_ineligible",
+                        f"{platform.value}: FLEX swap involves "
+                        f"{', '.join(ineligible)}, which cannot fill a FLEX",
+                        "comp rules",
+                    )
+                )
+
+        # The rows must reconcile with the headline, or the list was truncated.
+        total = round(sum(s.points_delta for s in comparison.swaps), 2)
+        if not comparison.unfilled and abs(total - comparison.points_gap) > 0.05:
+            issues.append(
+                Issue(
+                    IssueLevel.ERROR,
+                    "swap.totals_disagree",
+                    f"{platform.value}: swaps sum to {total:+.1f} but the headline "
+                    f"gap is {comparison.points_gap:+.1f} — swaps were dropped",
+                    "comp rules",
+                )
+            )
+
+    return issues
+
+
 # --- Environment ------------------------------------------------------------
 
 
@@ -806,6 +970,7 @@ def validate(
     if include_environment:
         issues.extend(check_environment())
         issues.extend(check_weather_scenarios())
+        issues.extend(check_swap_legality())
         try:
             import overrides
 

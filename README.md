@@ -84,6 +84,14 @@ The NWS asks for a real contact address. The default is a placeholder.
    server; it has never been authorised. Run `/mcp` and complete the OAuth flow.
 5. **Build the lower-right THE DUKE football.**
 6. **Tecmo Ballers mode.**
+7. **Build out the 1v1 game playing specs and UI.** The head-to-head quiz
+   described in ARCHITECTURE.md. Still gated — specs first, then approval,
+   then build.
+8. **Delete sensitive IP and audit.** `sources/developer.py` already runs a
+   secret scan on every release, and it has caught one real leak (a personal
+   email hardcoded as a default User-Agent). Widen it to a full history audit:
+   the scan covers the working tree, not past commits, so anything published
+   earlier is still in the git history.
 
 ## Data sources
 

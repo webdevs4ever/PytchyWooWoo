@@ -42,8 +42,33 @@ from sources.comp import (
 )
 
 NAV = (
-    '<p class="nav"><a href="/">Analyze</a> · <a href="/admin">Admin</a></p>'
+    '<p class="nav"><a href="/">Analyze</a><a href="/admin">Admin</a>'
+    '<span class="build">build {build}</span></p>'
 )
+
+def _build_stamp() -> str:
+    """Short commit the server is running, shown in the footer.
+
+    A stale process serving pre-fix code looks identical to a fresh one. This
+    makes the difference visible instead of leaving it to be inferred.
+    """
+    import subprocess
+    from pathlib import Path
+
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=Path(__file__).resolve().parent.parent,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return result.stdout.strip() or "unknown"
+    except Exception:
+        return "unknown"
+
+
+BUILD = _build_stamp()
 
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
@@ -131,7 +156,8 @@ button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .ok-note{margin-top:26px;padding:16px 18px;background:var(--surface);
   border:1px solid var(--ok);border-left:3px solid var(--ok);font-size:13.5px}
 .nav{margin:-14px 0 24px;font-size:12px;text-transform:uppercase;
-  letter-spacing:0.1em}
+  letter-spacing:0.1em;display:flex;gap:14px;align-items:baseline}
+.build{margin-left:auto;color:var(--dim);font-size:10px;letter-spacing:0.08em}
 .nav a{color:var(--muted);text-decoration:none;border-bottom:1px solid transparent}
 .nav a:hover{color:var(--brand);border-bottom-color:var(--brand)}
 table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px;
@@ -162,7 +188,7 @@ def _page(body: str, heading: str = COMP_HEADING) -> bytes:
 <title>Fantasy Bet Helper</title><style>{CSS}</style></head><body>
 <div class="shell">
 {heading}
-{NAV}
+{NAV.format(build=BUILD)}
 {body}
 </div></body></html>""".encode("utf-8")
 

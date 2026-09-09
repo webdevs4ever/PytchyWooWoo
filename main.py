@@ -33,6 +33,10 @@ def build_demo_slates() -> list[PlayerSlate]:
     """
     kickoff = datetime.now(timezone.utc) + timedelta(days=3)
 
+    # Season and week are carried so QA can align injury designations and
+    # roster status to the week actually being played.
+    season, week = 2026, 1
+
     def game(game_id: str, home: str, away: str) -> Game:
         return Game(
             game_id=game_id,
@@ -40,6 +44,8 @@ def build_demo_slates() -> list[PlayerSlate]:
             away_team=away,
             kickoff=kickoff,
             venue=config.STADIUMS[home],
+            season=season,
+            week=week,
         )
 
     buf_at_kc = game("2026-W1-BUF-KC", "KC", "BUF")

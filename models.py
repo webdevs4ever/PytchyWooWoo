@@ -49,6 +49,10 @@ class Game:
     away_team: str
     kickoff: datetime
     venue: Venue
+    # Populated from the schedule. Without it nothing downstream can check that
+    # an injury designation or roster status belongs to the week being played.
+    season: int | None = None
+    week: int | None = None
 
     def __str__(self) -> str:
         return f"{self.away_team} @ {self.home_team}"

@@ -435,6 +435,251 @@ def check_roster_status(slate: PlayerSlate) -> list[Issue]:
     return issues
 
 
+def check_active_that_week(slate: PlayerSlate) -> list[Issue]:
+    """Was this player on the active roster for the week actually being played?
+
+    The season roster says who is on a team *now*. A player can be on it and
+    still have been on reserve, the practice squad, or cut in the week under
+    consideration — and would score nothing. Checking against the season roster
+    alone silently passes those.
+    """
+    game = slate.game
+    if game.season is None or game.week is None:
+        return [
+            Issue(
+                IssueLevel.NOTICE,
+                "week.unknown",
+                "game carries no season/week, so roster and injury status "
+                "cannot be aligned to the week being played",
+                slate.player.name,
+            )
+        ]
+
+    try:
+        from sources.rosters import RostersUnavailable, get_weekly
+
+        weekly = get_weekly(game.season)
+    except Exception as exc:
+        return [
+            Issue(
+                IssueLevel.NOTICE,
+                "week.rosters_unavailable",
+                f"weekly rosters unavailable: {exc}",
+                slate.player.name,
+            )
+        ]
+
+    if game.week not in weekly.weeks:
+        return [
+            Issue(
+                IssueLevel.NOTICE,
+                "week.not_published",
+                f"week {game.week} rosters are not published yet for "
+                f"{game.season}; falling back to season roster",
+                slate.player.name,
+            )
+        ]
+
+    status = weekly.status_for(slate.player.name, game.week)
+    if status is None:
+        return [
+            Issue(
+                IssueLevel.WARNING,
+                "week.not_rostered",
+                f"not on any {game.season} week {game.week} roster — "
+                "cannot produce",
+                slate.player.name,
+            )
+        ]
+
+    issues: list[Issue] = []
+    if status != "ACT":
+        issues.append(
+            Issue(
+                IssueLevel.WARNING,
+                "week.not_active",
+                f"status {status!r} in week {game.week}, not ACT — "
+                "reserve, practice squad, or released",
+                slate.player.name,
+            )
+        )
+
+    team = weekly.team_for(slate.player.name, game.week)
+    if team and team != slate.player.team:
+        issues.append(
+            Issue(
+                IssueLevel.WARNING,
+                "week.wrong_team",
+                f"on {team} in week {game.week}, slate says "
+                f"{slate.player.team}",
+                slate.player.name,
+            )
+        )
+
+    return issues
+
+
+def check_injury_week(slate: PlayerSlate) -> list[Issue]:
+    """Is the injury designation from the week being played?
+
+    `fetch_status` returns a player's most recent report when no week is given.
+    That is the wrong answer for any week but the latest: a designation carried
+    over from week 18 says nothing about week 1.
+    """
+    game = slate.game
+    if game.week is None:
+        return []
+
+    try:
+        from sources.injuries import InjuriesUnavailable, get_report
+
+        report = get_report()
+    except Exception:
+        return []
+
+    exact = report.status_for(slate.player.name, week=game.week)
+    latest = report.status_for(slate.player.name)
+
+    if latest is None:
+        return []
+
+    if exact is None:
+        return [
+            Issue(
+                IssueLevel.WARNING,
+                "injury.wrong_week",
+                f"no injury report for week {game.week}; the designation in use "
+                f"is from week {latest.week} ({latest.report_status or 'listed'}) "
+                "and may not apply",
+                slate.player.name,
+            )
+        ]
+
+    if exact.report_status != latest.report_status:
+        return [
+            Issue(
+                IssueLevel.NOTICE,
+                "injury.week_differs",
+                f"week {game.week} says {exact.report_status or 'no designation'}, "
+                f"latest report (week {latest.week}) says "
+                f"{latest.report_status or 'no designation'}",
+                slate.player.name,
+            )
+        ]
+
+    return []
+
+
+# --- Weather scenario coverage ----------------------------------------------
+
+# Each case: label, condition, position, and the flag codes it must produce.
+# Written as data so a threshold change in config shows up here as a failure
+# rather than passing quietly.
+def _weather_scenarios() -> list[tuple[str, object, object, set[str]]]:
+    from models import Position as P
+    from models import WeatherCondition as W
+
+    warn_wind = config.WIND_WARNING_MPH
+    crit_wind = config.WIND_CRITICAL_MPH
+
+    return [
+        ("dome", W.indoor(), P.K, set()),
+        ("calm and mild", W(68, 3, 0.0, "Clear"), P.QB, set()),
+        (
+            "wind at the warning threshold",
+            W(60, warn_wind, 0.0, "Windy"),
+            P.K,
+            {"weather.wind"},
+        ),
+        (
+            "wind below the threshold",
+            W(60, warn_wind - 1, 0.0, "Breezy"),
+            P.K,
+            set(),
+        ),
+        (
+            "wind at the critical threshold",
+            W(60, crit_wind, 0.0, "Very windy"),
+            P.QB,
+            {"weather.wind"},
+        ),
+        (
+            "high wind, position not wind-sensitive",
+            W(60, crit_wind, 0.0, "Very windy"),
+            P.RB,
+            set(),
+        ),
+        (
+            "precipitation above the threshold",
+            W(55, 5, config.PRECIP_WARNING_CHANCE, "Rain"),
+            P.RB,
+            {"weather.precipitation"},
+        ),
+        (
+            "extreme cold",
+            W(config.COLD_WARNING_F, 5, 0.0, "Frigid"),
+            P.QB,
+            {"weather.cold"},
+        ),
+        (
+            "extreme heat",
+            W(config.HEAT_WARNING_F, 5, 0.0, "Hot"),
+            P.RB,
+            {"weather.heat"},
+        ),
+        (
+            "wind and rain together",
+            W(50, crit_wind, 0.9, "Storm"),
+            P.WR,
+            {"weather.wind", "weather.precipitation"},
+        ),
+    ]
+
+
+def check_weather_scenarios() -> list[Issue]:
+    """Run the weather rules across the scenario space.
+
+    A data-quality check validates the data; this validates the *rules*. A
+    threshold edited in `config.py` without a matching change here fails loudly
+    instead of silently changing what gets flagged on a Sunday.
+    """
+    from datetime import timedelta
+
+    import rules as rules_module
+    from models import Game, Player, PlayerSlate
+
+    kickoff = datetime.now(timezone.utc) + timedelta(days=1)
+    venue = config.STADIUMS["KC"]
+    issues: list[Issue] = []
+
+    for label, weather, position, expected in _weather_scenarios():
+        slate = PlayerSlate(
+            player=Player("scenario", "Scenario Player", position, "KC"),
+            game=Game("scenario", "KC", "BUF", kickoff, venue),
+            weather=weather,
+        )
+        produced = {flag.code for flag in rules_module.check_weather(slate)}
+
+        missing = expected - produced
+        extra = produced - expected
+        if missing or extra:
+            detail = []
+            if missing:
+                detail.append(f"expected but absent: {', '.join(sorted(missing))}")
+            if extra:
+                detail.append(f"unexpected: {', '.join(sorted(extra))}")
+            issues.append(
+                Issue(
+                    IssueLevel.ERROR,
+                    "weather.scenario_failed",
+                    f"{label} ({position.value}) — " + "; ".join(detail),
+                    "weather rules",
+                )
+            )
+
+    return issues
+
+
 # --- Environment ------------------------------------------------------------
 
 
@@ -507,6 +752,12 @@ PER_SLATE_CHECKS = [
     check_pricing_sane,
 ]
 
+# Checks that need the week being played, and the network to resolve it.
+PER_SLATE_WEEK_CHECKS = [
+    check_active_that_week,
+    check_injury_week,
+]
+
 _LEVEL_ORDER = {IssueLevel.ERROR: 0, IssueLevel.WARNING: 1, IssueLevel.NOTICE: 2}
 
 
@@ -554,6 +805,7 @@ def validate(
 
     if include_environment:
         issues.extend(check_environment())
+        issues.extend(check_weather_scenarios())
         try:
             import overrides
 
@@ -576,6 +828,8 @@ def validate(
         if include_injuries:
             issues.extend(check_injury(slate))
             issues.extend(check_roster_status(slate))
+            for check in PER_SLATE_WEEK_CHECKS:
+                issues.extend(check(slate))
 
     issues.sort(key=lambda i: (_LEVEL_ORDER[i.level], i.subject, i.code))
     return QAReport(issues)

@@ -107,6 +107,8 @@ def games_for(season: int, week: int) -> list[Game]:
                 away_team=away,
                 kickoff=_kickoff(row),
                 venue=_venue(row, home),
+                season=season,
+                week=week,
             )
         )
 

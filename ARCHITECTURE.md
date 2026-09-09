@@ -41,7 +41,7 @@ Output is a CLI report today. A dashboard is planned (see below).
 | `sources/narratives.py` | Narrative Street — revenge games and reunions from roster history |
 | `sources/comp.py` | Comp Mode — optimizer, upload parser, diff, and decision markers |
 | `sources/serve.py` | Local web server for the upload flow (localhost only) |
-| `sources/schedule.py` | Weekly schedule from nflverse — who plays whom |
+| `sources/schedule.py` | Weekly schedule from nflverse — who plays whom, and the week number |
 
 ### A note on `sources/`
 
@@ -97,6 +97,7 @@ game rather than per player.
 | nflverse (`injuries_{season}.csv`) | Official injury report, for QA | `InjuriesUnavailable` → QA warning, pipeline continues |
 | nflverse (`roster_{season}.csv`) | Jersey numbers and roster status | `RostersUnavailable` → cards fall back to position |
 | nflverse (`games.csv`) | Schedule, kickoff times, and roof type | `ScheduleUnavailable` → narratives cannot scan league-wide |
+| nflverse (`roster_weekly_{season}.csv`) | Per-week roster status, for QA week alignment | Falls back to the season roster with a notice |
 | The Odds API | Player props → projections. Free tier ~500 req/month | Falls back to salary-export season averages |
 | DK / FD contest CSV exports | Salaries and salary caps. User-downloaded | No export → no value flags for that platform |
 
@@ -320,7 +321,39 @@ validation of the rest of the slate. Categories:
 - **Soundness** — zero or over-cap salary, zero projection against a real salary,
   forecast values outside physical range
 - **Availability** — injury designations from the official report
+- **Week alignment** — was the player on the *active roster for that week*, and
+  is the injury designation from that week
+- **Weather scenarios** — the rules themselves, run across the condition space
 - **Environment** — stale `SPLITS_SEASON`, missing API key, empty `salaries/`
+
+#### Week alignment
+
+The season roster says who is on a team *now*. A player can be on it and still
+have been on reserve, the practice squad, or released in the week being played —
+and would score nothing. `check_active_that_week` reads
+`roster_weekly_{season}.csv`, which carries per-week status, and flags anything
+that is not `ACT`.
+
+`check_injury_week` covers the matching gap on the injury side.
+`fetch_status(name)` returns a player's *most recent* report when no week is
+given, which is the wrong answer for any week but the latest — a designation
+carried over from week 18 says nothing about week 1. The check reports when the
+designation in use is from a different week than the game.
+
+Both need `Game.season` and `Game.week`, now populated from the schedule.
+
+#### Weather scenarios
+
+`check_weather_scenarios` validates the *rules* rather than the data. Ten cases
+run the weather checks across the condition space — dome, calm, wind at and just
+below each threshold, wind on a position that is not wind-sensitive,
+precipitation, extreme cold, extreme heat, and wind with rain together — each
+asserting exactly which flag codes must appear.
+
+Thresholds are read from `config.py` rather than hardcoded, so the suite moves
+with them. What it catches is incoherence: setting `WIND_WARNING_MPH` above
+`WIND_CRITICAL_MPH` fails the suite immediately rather than quietly changing
+what gets flagged on a Sunday.
 
 The most valuable check is `unsound.projection_zero`. A zero projection against a
 real salary is not missing data, so the value check runs and confidently reports

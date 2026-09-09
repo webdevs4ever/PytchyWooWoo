@@ -181,3 +181,83 @@ def get_book(season: int | None = None) -> RosterBook:
 def fetch_entry(player_name: str, team: str | None = None) -> RosterEntry | None:
     """Return a player's roster record, or None if not found or ambiguous."""
     return get_book().entry_for(player_name, team)
+
+
+# --- Weekly rosters ---------------------------------------------------------
+
+WEEKLY_URL = (
+    "https://github.com/nflverse/nflverse-data/releases/download/weekly_rosters"
+)
+
+
+class WeeklyRoster:
+    """One season's week-by-week roster statuses.
+
+    The season roster says who is on a team now. This says who was on it in a
+    given week — the only way to check an injury designation or a lineup slot
+    against the week actually being played.
+    """
+
+    def __init__(self, season: int) -> None:
+        self.season = season
+        # (player key, week) -> status
+        self._status: dict[tuple[str, int], str] = {}
+        self._teams: dict[tuple[str, int], str] = {}
+        self._weeks: set[int] = set()
+        self._build()
+
+    def _build(self) -> None:
+        from sources.odds import strict_name
+
+        cached = config.CACHE_DIR / f"roster_weekly_{self.season}.csv"
+        if cached.exists() and cached.stat().st_size > 0:
+            text = cached.read_text(encoding="utf-8")
+        else:
+            try:
+                resp = requests.get(
+                    f"{WEEKLY_URL}/roster_weekly_{self.season}.csv",
+                    timeout=config.REQUEST_TIMEOUT_SECONDS * 4,
+                )
+                resp.raise_for_status()
+            except requests.RequestException as exc:
+                raise RostersUnavailable(
+                    f"Could not download {self.season} weekly rosters: {exc}"
+                ) from exc
+            cached.parent.mkdir(parents=True, exist_ok=True)
+            cached.write_text(resp.text, encoding="utf-8")
+            text = resp.text
+
+        for row in csv.DictReader(io.StringIO(text)):
+            key = strict_name(row.get("full_name", ""))
+            try:
+                week = int(row.get("week") or 0)
+            except ValueError:
+                continue
+            if not key or not week:
+                continue
+            self._status[(key, week)] = (row.get("status") or "").strip().upper()
+            self._teams[(key, week)] = (row.get("team") or "").strip().upper()
+            self._weeks.add(week)
+
+    @property
+    def weeks(self) -> set[int]:
+        return set(self._weeks)
+
+    def status_for(self, player_name: str, week: int) -> str | None:
+        from sources.odds import strict_name
+
+        return self._status.get((strict_name(player_name), week))
+
+    def team_for(self, player_name: str, week: int) -> str | None:
+        from sources.odds import strict_name
+
+        return self._teams.get((strict_name(player_name), week))
+
+
+_WEEKLY: dict[int, WeeklyRoster] = {}
+
+
+def get_weekly(season: int) -> WeeklyRoster:
+    if season not in _WEEKLY:
+        _WEEKLY[season] = WeeklyRoster(season)
+    return _WEEKLY[season]

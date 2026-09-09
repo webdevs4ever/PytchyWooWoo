@@ -203,6 +203,19 @@ alone builds lineups around players who will not take a snap — their salary is
 cheap precisely because they are out. Pass `--include-out` to see the inflated
 version; the gap between them is the cost of the illusion.
 
+**Swaps pair within position.** A lineup slot only accepts the position it is
+for, so "drop your QB, add a tight end" is not a move anyone can make. The
+original implementation sorted the dropped and added players by projected points
+and zipped the two lists, which produced exactly those illegal suggestions —
+five of six swaps crossed positions in the first real test. Pairing is now done
+per position, with FLEX-driven position changes marked `positional` and labelled
+in the output rather than implied.
+
+**Unequal counts are reported, not truncated.** `zip` silently dropped the
+remainder when an uploaded lineup was short, so the swap deltas no longer summed
+to the headline gap — one report showed +64.0 at the top and +18.6 across the
+rows. Unmatched optimal players are now surfaced as unfilled slots.
+
 **Swaps explain their own arithmetic.** A ruled-out player's projection in the
 salary export is a stale season average, not the zero they will score, so
 dropping them can display as a point loss. Those swaps carry a note saying so.

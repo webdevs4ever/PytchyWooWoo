@@ -244,15 +244,32 @@ def _render_result(comparison, user_marked, optimal_marked, rules) -> str:
             f'<div class="err">Over the cap by ${comparison.over_cap:,} — '
             "this lineup is invalid.</div>"
         )
+    if comparison.unfilled:
+        parts.append(
+            '<div class="err"><b>Slots your lineup did not fill:</b> '
+            + html.escape(
+                ", ".join(f"{p.name} ({p.position.value})" for p in comparison.unfilled)
+            )
+            + "</div>"
+        )
 
     if comparison.swaps:
         swaps = []
         for swap in comparison.swaps:
             sign = "+" if swap.salary_delta >= 0 else "−"
-            note = f"<i>{html.escape(swap.note)}</i>" if swap.note else ""
+            notes = []
+            if swap.positional:
+                notes.append("FLEX slot — changes position, legal here only")
+            if swap.note:
+                notes.append(swap.note)
+            note = f"<i>{html.escape(' · '.join(notes))}</i>" if notes else ""
+            slot = f'<span class="scope">{html.escape(swap.slot)}</span> ' if swap.slot else ""
             swaps.append(
-                f'<div class="swap"><b>{html.escape(swap.out_player.name)}</b> → '
-                f"<b>{html.escape(swap.in_player.name)}</b> "
+                f'<div class="swap">{slot}'
+                f'<b>{html.escape(swap.out_player.name)}</b> '
+                f'<span class="scope">{swap.out_player.position.value}</span> → '
+                f'<b>{html.escape(swap.in_player.name)}</b> '
+                f'<span class="scope">{swap.in_player.position.value}</span> '
                 f"{swap.points_delta:+.1f} pts · {sign}${abs(swap.salary_delta):,}"
                 f"{note}</div>"
             )

@@ -296,6 +296,10 @@ class Swap:
     in_player: Player
     salary_delta: int
     points_delta: float
+    slot: str = ""
+    # True when the swap changes position, which is only legal through the
+    # FLEX. Every other swap must be like-for-like.
+    positional: bool = False
     # Set when the outgoing player will not play, which makes a negative
     # points_delta misleading — their real projection is zero, not what the
     # salary export last recorded.
@@ -311,6 +315,10 @@ class Comparison:
     kept: list[LineupEntry] = field(default_factory=list)
     swaps: list[Swap] = field(default_factory=list)
     alerts: list[str] = field(default_factory=list)
+    # Optimal players with no counterpart to swap out — the uploaded lineup was
+    # short at that position.
+    unfilled: list[Player] = field(default_factory=list)
+    surplus: list[Player] = field(default_factory=list)
 
     @property
     def points_gap(self) -> float:
@@ -323,33 +331,72 @@ class Comparison:
 
 
 def compare(user: Lineup, optimal: Lineup, missing: list[str] | None = None) -> Comparison:
-    """Diff a user's lineup against the optimal one."""
+    """Diff a user's lineup against the optimal one.
+
+    Swaps are paired **within position**. Pairing by projected points alone —
+    which is what this did originally — produced suggestions like "drop your QB,
+    add a tight end", which is not a move anyone can make. A lineup slot only
+    accepts the position it is for.
+
+    The exception is the FLEX, which accepts RB, WR, or TE. Those swaps are
+    marked `positional` so the output can say so rather than implying an
+    illegal substitution.
+    """
+    from collections import defaultdict
+
     user_by_id = {e.player.player_id: e for e in user.entries}
     optimal_by_id = {e.player.player_id: e for e in optimal.entries}
 
     shared = user_by_id.keys() & optimal_by_id.keys()
     kept = [user_by_id[pid] for pid in shared]
 
-    dropped = sorted(
-        (e for pid, e in user_by_id.items() if pid not in shared),
-        key=lambda e: e.projected_points,
-    )
-    added = sorted(
-        (e for pid, e in optimal_by_id.items() if pid not in shared),
-        key=lambda e: e.projected_points,
-    )
+    dropped = [e for pid, e in user_by_id.items() if pid not in shared]
+    added = [e for pid, e in optimal_by_id.items() if pid not in shared]
 
-    swaps = [
-        Swap(
+    out_by_position: dict[Position, list[LineupEntry]] = defaultdict(list)
+    in_by_position: dict[Position, list[LineupEntry]] = defaultdict(list)
+    for entry in dropped:
+        out_by_position[entry.player.position].append(entry)
+    for entry in added:
+        in_by_position[entry.player.position].append(entry)
+
+    def build(out: LineupEntry, into: LineupEntry, positional: bool) -> Swap:
+        return Swap(
             out_player=out.player,
             in_player=into.player,
             salary_delta=into.salary - out.salary,
             points_delta=round(into.projected_points - out.projected_points, 2),
+            slot=out.slot,
+            positional=positional,
         )
-        for out, into in zip(dropped, added)
-    ]
+
+    swaps: list[Swap] = []
+    spare_out: list[LineupEntry] = []
+    spare_in: list[LineupEntry] = []
+
+    for position in set(out_by_position) | set(in_by_position):
+        outs = sorted(out_by_position[position], key=lambda e: -e.projected_points)
+        ins = sorted(in_by_position[position], key=lambda e: -e.projected_points)
+        paired = min(len(outs), len(ins))
+        swaps.extend(build(o, i, False) for o, i in zip(outs[:paired], ins[:paired]))
+        spare_out.extend(outs[paired:])
+        spare_in.extend(ins[paired:])
+
+    # Anything left over changes position, which only the FLEX allows.
+    spare_out.sort(key=lambda e: -e.projected_points)
+    spare_in.sort(key=lambda e: -e.projected_points)
+    paired = min(len(spare_out), len(spare_in))
+    swaps.extend(
+        build(o, i, True) for o, i in zip(spare_out[:paired], spare_in[:paired])
+    )
+
+    # Never truncate silently: an unequal count means the uploaded lineup was
+    # short, and dropping the remainder would understate the gap.
+    unpaired_out = spare_out[paired:]
+    unpaired_in = spare_in[paired:]
+
+    swaps.sort(key=lambda s: (s.positional, -s.points_delta))
     _mark_unplayable(swaps)
-    swaps.sort(key=lambda s: -s.points_delta)
 
     return Comparison(
         platform=user.platform,
@@ -358,6 +405,8 @@ def compare(user: Lineup, optimal: Lineup, missing: list[str] | None = None) -> 
         missing=list(missing or []),
         kept=sorted(kept, key=lambda e: -e.projected_points),
         swaps=swaps,
+        unfilled=[e.player for e in unpaired_in],
+        surplus=[e.player for e in unpaired_out],
     )
 
 
@@ -625,12 +674,30 @@ def format_comparison(comparison: Comparison) -> str:
         parts.append(f"Suggested swaps ({comparison.points_gap:+} projected points):")
         for swap in comparison.swaps:
             direction = "+" if swap.salary_delta >= 0 else "-"
+            slot = f"[{swap.slot}] " if swap.slot else ""
             parts.append(
-                f"  OUT {swap.out_player.name:24} -> IN {swap.in_player.name:24} "
-                f"{swap.points_delta:+6.1f} pts   {direction}${abs(swap.salary_delta):,}"
+                f"  {slot}{swap.out_player.position.value} "
+                f"{swap.out_player.name:22} -> {swap.in_player.position.value} "
+                f"{swap.in_player.name:22} {swap.points_delta:+6.1f} pts   "
+                f"{direction}${abs(swap.salary_delta):,}"
             )
+            if swap.positional:
+                parts.append("        FLEX slot — changes position, legal here only")
             if swap.note:
                 parts.append(f"        {swap.note}")
+
+    if comparison.unfilled:
+        parts.append("")
+        parts.append(
+            "Slots your lineup did not fill: "
+            + ", ".join(f"{p.name} ({p.position.value})" for p in comparison.unfilled)
+        )
+    if comparison.surplus:
+        parts.append("")
+        parts.append(
+            "No counterpart in the optimal lineup: "
+            + ", ".join(f"{p.name} ({p.position.value})" for p in comparison.surplus)
+        )
 
     if comparison.kept:
         parts.append("")

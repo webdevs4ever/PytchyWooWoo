@@ -70,6 +70,21 @@ export NWS_USER_AGENT="fantasy-bet-helper (you@example.com)"
 
 The NWS asks for a real contact address. The default is a placeholder.
 
+## TODO
+
+1. **Write down specific dates to QA NFL injuries and rosters.** Injury reports
+   and roster moves land on a weekly rhythm — final designations Friday,
+   inactives 90 minutes before kickoff. Pin the actual dates and times so QA
+   runs against the right snapshot instead of whatever happens to be cached.
+2. **Figure out the UI with expert picks built in.** Where consensus rankings
+   sit on the board without competing with the flags.
+3. **Ask the user their favourite team and skin the background in that team's
+   colours.**
+4. **Connect the GitHub MCP in Claude.** `.mcp.json` already registers the
+   server; it has never been authorised. Run `/mcp` and complete the OAuth flow.
+5. **Build the lower-right THE DUKE football.**
+6. **Tecmo Ballers mode.**
+
 ## Data sources
 
 Weather from the National Weather Service. Splits, rosters, injury reports, and

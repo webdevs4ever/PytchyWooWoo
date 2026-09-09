@@ -350,9 +350,22 @@ class PricingBook:
                 self.props_error = str(exc)
 
     def pool_for(self, platform: Platform) -> list[Candidate]:
-        """Every priced player on one platform, with projections applied."""
+        """Every priced player on one platform, with projections applied.
+
+        Manual corrections are layered last and win outright — including
+        players the export omits entirely, which are appended to the pool.
+        """
+        import overrides as ov
+
+        try:
+            corrections = ov.load()
+        except ov.OverrideError:
+            corrections = ov.Overrides()
+
         out: list[Candidate] = []
         props = self.props.get(platform, {})
+        seen: set[str] = set()
+
         for candidate in self.pools.get(platform, []):
             key = normalize_name(candidate.player.name)
             stats = props.get(key)
@@ -366,7 +379,51 @@ class PricingBook:
                 )
             else:
                 out.append(candidate)
-        return out
+
+        # Layer corrections over what the export gave us.
+        adjusted: list[Candidate] = []
+        for candidate in out:
+            key = strict_name(candidate.player.name)
+            seen.add(key)
+            override = corrections.get(key)
+            if override is None or not override.has_pricing():
+                adjusted.append(candidate)
+                continue
+            adjusted.append(
+                Candidate(
+                    player=candidate.player,
+                    pricing=Pricing(
+                        platform,
+                        override.salary
+                        if override.salary is not None
+                        else candidate.pricing.salary,
+                        override.projected_points
+                        if override.projected_points is not None
+                        else candidate.pricing.projected_points,
+                    ),
+                )
+            )
+
+        # A correction can also supply a player the export omits entirely.
+        for key, override in corrections.players.items():
+            if key in seen or override.salary is None:
+                continue
+            try:
+                position = Position((override.position or "").upper())
+            except ValueError:
+                continue
+            adjusted.append(
+                Candidate(
+                    player=Player(
+                        key, override.display_name or key, position, override.team or ""
+                    ),
+                    pricing=Pricing(
+                        platform, override.salary, override.projected_points or 0.0
+                    ),
+                )
+            )
+
+        return adjusted
 
     def pricing_for(self, player: Player) -> dict[Platform, Pricing]:
         """Salary and projection per platform, empty when nothing is known."""

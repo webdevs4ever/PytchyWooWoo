@@ -25,7 +25,18 @@ SCHEMA_VERSION = 1
 
 # Fields a correction may set. Anything else is rejected as a typo rather than
 # silently ignored.
-EDITABLE_FIELDS = {"display_name", "jersey_number", "team", "position", "status"}
+EDITABLE_FIELDS = {
+    "display_name",
+    "jersey_number",
+    "team",
+    "position",
+    "status",
+    # Pricing corrections apply to both platforms. A salary export that omits a
+    # player, or lists them at the wrong position, is common enough that
+    # editing it by hand should not mean editing the CSV.
+    "salary",
+    "projected_points",
+}
 
 
 class OverrideError(Exception):
@@ -40,6 +51,8 @@ class PlayerOverride:
     team: str | None = None
     position: str | None = None
     status: str | None = None
+    salary: int | None = None
+    projected_points: float | None = None
     note: str = ""
     added_at: str = ""
     added_by: str = ""
@@ -63,6 +76,9 @@ class PlayerOverride:
             ),
             status=self.status or entry.status,
         )
+
+    def has_pricing(self) -> bool:
+        return self.salary is not None or self.projected_points is not None
 
     def as_entry(self) -> RosterEntry:
         """Build an entry from scratch, for a player absent upstream."""
@@ -124,6 +140,12 @@ def _parse(payload: dict) -> Overrides:
         number = raw.get("jersey_number")
         if number is not None and not isinstance(number, int):
             raise OverrideError(f"override {key!r}: jersey_number must be an integer")
+        salary = raw.get("salary")
+        if salary is not None and not isinstance(salary, int):
+            raise OverrideError(f"override {key!r}: salary must be an integer")
+        projection = raw.get("projected_points")
+        if projection is not None and not isinstance(projection, (int, float)):
+            raise OverrideError(f"override {key!r}: projected_points must be a number")
 
         players[key] = PlayerOverride(
             key=key,
@@ -132,6 +154,8 @@ def _parse(payload: dict) -> Overrides:
             team=raw.get("team"),
             position=raw.get("position"),
             status=raw.get("status"),
+            salary=salary,
+            projected_points=(float(projection) if projection is not None else None),
             note=raw.get("note", ""),
             added_at=raw.get("added_at", ""),
             added_by=raw.get("added_by", ""),
@@ -172,6 +196,12 @@ def serialize(overrides: Overrides) -> dict:
                 **({"team": o.team} if o.team else {}),
                 **({"position": o.position} if o.position else {}),
                 **({"status": o.status} if o.status else {}),
+                **({"salary": o.salary} if o.salary is not None else {}),
+                **(
+                    {"projected_points": o.projected_points}
+                    if o.projected_points is not None
+                    else {}
+                ),
                 **({"note": o.note} if o.note else {}),
                 **({"added_at": o.added_at} if o.added_at else {}),
                 **({"added_by": o.added_by} if o.added_by else {}),

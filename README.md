@@ -57,8 +57,22 @@ Offline flags exist on the main pipeline for working without network:
 Most sources are free and need no key. Two things are yours to provide:
 
 **Salary exports** → `salaries/`. Download the contest CSV from a DraftKings or
-FanDuel lineup page. Without these there are no value flags and nothing for the
-optimizer to work with. See [salaries/README.md](salaries/README.md).
+FanDuel lineup page. See [salaries/README.md](salaries/README.md).
+
+Until you have one, `npm run admin` → `generate-salaries` builds a placeholder
+export covering **every active skill player** (567 of them), with projections
+derived from the previous season's actual production rather than invented. Real
+exports replace it; the prices are the only synthetic part.
+
+Individual players can be corrected or added by hand:
+
+```bash
+python admin.py set "James Cook" --salary 9200 --note "underpriced in export"
+python admin.py set "Some Rookie" --position WR --team KC --salary 3200 --projection 9.5
+```
+
+A correction carrying a salary for someone absent from the export adds them to
+the pool outright.
 
 **`ODDS_API_KEY`** → optional. Salary exports carry a season average, so
 projections work without it; player props only refine them.

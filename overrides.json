@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-09-06T20:03:25+00:00",
+  "updated_at": "2026-09-09T02:32:49+00:00",
   "players": {},
   "featured": [
     "kirkcousins"
@@ -80,6 +80,52 @@
       "detail": {
         "kind": "revenge",
         "strength": "strong"
+      }
+    },
+    {
+      "at": "2026-09-09T02:32:29+00:00",
+      "by": "rasfreem",
+      "action": "set",
+      "key": "practicesquadguy",
+      "detail": {
+        "display_name": "Practice Squad Guy",
+        "team": "KC",
+        "position": "WR",
+        "salary": 3200,
+        "projected_points": 9.5
+      }
+    },
+    {
+      "at": "2026-09-09T02:32:29+00:00",
+      "by": "rasfreem",
+      "action": "set",
+      "key": "jamescook",
+      "detail": {
+        "display_name": "James Cook",
+        "salary": 9200
+      }
+    },
+    {
+      "at": "2026-09-09T02:32:49+00:00",
+      "by": "rasfreem",
+      "action": "remove",
+      "key": "practicesquadguy",
+      "detail": {
+        "position": "WR",
+        "team": "KC",
+        "projected_points": 9.5,
+        "display_name": "Practice Squad Guy",
+        "salary": 3200
+      }
+    },
+    {
+      "at": "2026-09-09T02:32:49+00:00",
+      "by": "rasfreem",
+      "action": "remove",
+      "key": "jamescook",
+      "detail": {
+        "salary": 9200,
+        "display_name": "James Cook"
       }
     }
   ]

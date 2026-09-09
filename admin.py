@@ -32,6 +32,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import config
 import overrides as ov
 from overrides import OVERRIDES_PATH, PlayerOverride
 
@@ -176,12 +177,17 @@ def cmd_set(name: str, args, assume_yes: bool = False) -> int:
             "team": args.team.upper() if args.team else None,
             "position": args.position.upper() if args.position else None,
             "status": args.status.upper() if args.status else None,
+            "salary": args.salary,
+            "projected_points": args.projection,
         }.items()
         if v is not None
     }
     if set(changes) == {"display_name"}:
-        print("Nothing to set. Pass at least one of --number/--team/--position/--status.",
-              file=sys.stderr)
+        print(
+            "Nothing to set. Pass at least one of "
+            "--number/--team/--position/--status/--salary/--projection.",
+            file=sys.stderr,
+        )
         return 1
 
     overrides = ov.load()
@@ -211,6 +217,8 @@ def cmd_set(name: str, args, assume_yes: bool = False) -> int:
         team=changes.get("team"),
         position=changes.get("position"),
         status=changes.get("status"),
+        salary=changes.get("salary"),
+        projected_points=changes.get("projected_points"),
         note=args.note or (existing.note if existing else ""),
         added_at=_now(),
         added_by=_actor(),
@@ -372,6 +380,111 @@ def cmd_unfeature(name: str, assume_yes: bool = False) -> int:
     return 0
 
 
+def cmd_generate_salaries(season: int = 2026, assume_yes: bool = False) -> int:
+    """Build placeholder salary exports covering every active skill player.
+
+    Real contest exports are the right input; this exists so the pool is not
+    missing real players while you wait for one. Projections are derived from
+    the most recent season's actual production rather than invented, and
+    salaries are scaled from those projections — so the pool behaves like a real
+    slate even though the prices are synthetic.
+    """
+    require_root()
+
+    import csv
+    import io
+    from collections import defaultdict
+
+    from sources.rosters import _download_season
+    from sources.splits import _download_season as _download_stats
+    from sources.odds import strict_name
+
+    # --- who is active this season ---
+    roster = []
+    for row in csv.DictReader(io.StringIO(_download_season(season))):
+        if (row.get("status") or "").strip().upper() != "ACT":
+            continue
+        position = (row.get("position") or "").strip().upper()
+        if position not in {"QB", "RB", "WR", "TE", "K"}:
+            continue
+        name, team = row.get("full_name", "").strip(), (row.get("team") or "").strip().upper()
+        if name and team:
+            roster.append((position, name, team))
+
+    # --- real production, for projections ---
+    produced: dict[str, list[float]] = defaultdict(list)
+    stats_season = season - 1
+    for _ in range(3):  # walk back until a published stats file is found
+        try:
+            text = _download_stats(stats_season)
+            break
+        except Exception:
+            stats_season -= 1
+    else:
+        print("No published stats file to derive projections from.", file=sys.stderr)
+        return 1
+
+    for row in csv.DictReader(io.StringIO(text)):
+        if row.get("season_type") != "REG":
+            continue
+        try:
+            produced[strict_name(row.get("player_display_name", ""))].append(
+                float(row.get("fantasy_points_ppr") or 0.0)
+            )
+        except ValueError:
+            continue
+
+    # Baselines for players with no history — rookies, and anyone who did not
+    # play. Deliberately modest so they do not crowd the optimizer.
+    BASELINE = {"QB": 9.0, "RB": 5.0, "WR": 5.0, "TE": 3.5, "K": 6.5}
+    RATE = {"QB": 330, "RB": 330, "WR": 330, "TE": 300, "K": 480}
+    FLOOR = {"QB": 4400, "RB": 3800, "WR": 3600, "TE": 2900, "K": 4000}
+
+    players = []
+    for position, name, team in roster:
+        games = produced.get(strict_name(name), [])
+        projection = round(sum(games) / len(games), 1) if games else BASELINE[position]
+        salary = max(FLOOR[position], int(round(projection * RATE[position] / 100) * 100))
+        players.append((position, name, team, min(salary, 9800), projection))
+
+    for team in sorted(config.STADIUMS):
+        players.append(("DST", f"{team} D/ST", team, 2800, 6.5))
+
+    print(f"\n{len(players)} players from the {season} active rosters")
+    print(f"projections from {stats_season} actual production; salaries derived")
+    print(f"writing to {config.SALARY_DIR}/")
+    if not _confirm("\nOverwrite the SAMPLE exports?", assume_yes):
+        print("Cancelled. Nothing written.")
+        return 1
+
+    config.SALARY_DIR.mkdir(parents=True, exist_ok=True)
+
+    dk = config.SALARY_DIR / "SAMPLE-DKSalaries.csv"
+    with dk.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["Position", "Name + ID", "Name", "ID", "Roster Position",
+                         "Salary", "Game Info", "TeamAbbrev", "AvgPointsPerGame"])
+        for i, (pos, name, team, salary, proj) in enumerate(players, 10000):
+            slot = f"{pos}/FLEX" if pos in {"RB", "WR", "TE"} else pos
+            writer.writerow([pos, f"{name} ({i})", name, i, slot, salary,
+                             "SAMPLE", team, proj])
+
+    fd = config.SALARY_DIR / "SAMPLE-FanDuel-players.csv"
+    with fd.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["Id", "Position", "First Name", "Nickname", "Last Name",
+                         "FPPG", "Played", "Salary", "Game", "Team", "Opponent"])
+        for i, (pos, name, team, salary, proj) in enumerate(players, 20000):
+            parts = name.split()
+            writer.writerow([i, pos, parts[0], name, parts[-1],
+                             round(proj * (0.86 if pos in {"RB", "WR", "TE"} else 0.97), 1),
+                             16, int(round(salary * 1.19 / 100) * 100),
+                             "SAMPLE", team, "SAMPLE"])
+
+    print(f"Wrote {dk.name} and {fd.name} — {len(players)} players each.")
+    return 0
+
+
 def cmd_status() -> int:
     """Run-level health, moved here from the dashboard.
 
@@ -509,6 +622,10 @@ def main(argv: list[str] | None = None) -> int:
     p_set.add_argument("--team")
     p_set.add_argument("--position")
     p_set.add_argument("--status")
+    p_set.add_argument("--salary", type=int, help="override the export's salary")
+    p_set.add_argument(
+        "--projection", type=float, help="override the export's projected points"
+    )
     p_set.add_argument("--note", help="why this correction exists")
     p_set.add_argument("-y", "--yes", action="store_true", help="skip confirmation")
 
@@ -521,6 +638,13 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("check", help="validate overrides against upstream")
     sub.add_parser("status", help="slate health: players, flags, and QA counts")
+
+    p_gen = sub.add_parser(
+        "generate-salaries",
+        help="rebuild placeholder exports covering every active skill player",
+    )
+    p_gen.add_argument("--season", type=int, default=2026)
+    p_gen.add_argument("-y", "--yes", action="store_true")
     p_narr = sub.add_parser(
         "narratives", help="every detected narrative, with grading and rule"
     )
@@ -553,6 +677,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_check()
         if args.command == "status":
             return cmd_status()
+        if args.command == "generate-salaries":
+            return cmd_generate_salaries(args.season, assume_yes=args.yes)
         if args.command == "narratives":
             return cmd_narratives(strong_only=args.strong)
         if args.command == "feature":

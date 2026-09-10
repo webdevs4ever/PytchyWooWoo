@@ -84,7 +84,10 @@ def _clean(value: str) -> str:
     text = re.sub(r"\[\[([^\]]*)\]\]", r"\1", text)             # plain link
     text = re.sub(r"\{\{[^}]*\}\}", "", text)                   # leftover templates
     text = re.sub(r"<[^>]+>", "", text)
+    # Templates opened before the captured line leave orphan braces behind.
+    text = text.replace("}}", "").replace("{{", "")
     text = text.replace("'''", "").replace("''", "")
+    text = re.sub(r"\(\s*\)", "", text)
     return re.sub(r"\s+", " ", text).strip(" ,;|")
 
 

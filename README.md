@@ -111,7 +111,15 @@ The NWS asks for a real contact address. The default is a placeholder.
 7. **Build out the 1v1 game playing specs and UI.** The head-to-head quiz
    described in ARCHITECTURE.md. Still gated — specs first, then approval,
    then build. Lives with THE DUKE
-8. **Delete sensitive IP and audit.** `sources/developer.py` already runs a
+8. **Find an analyst consensus source.** The predictions grader has no expert
+   signal — Sleeper's trending adds are fantasy-manager behaviour, not analyst
+   opinion, and are labelled that way. Already ruled out: Sleeper has no
+   rankings endpoint (404) and its projections return empty for unplayed weeks;
+   X/Twitter has no free API and scraping it violates their terms. Worth
+   checking: FantasyPros (sells consensus rankings through a paid API), RSS
+   feeds from fantasy outlets, and whether any aggregator licenses expert
+   projections cheaply.
+9. **Delete sensitive IP and audit.** `sources/developer.py` already runs a
    secret scan on every release, and it has caught one real leak (a personal
    email hardcoded as a default User-Agent). Widen it to a full history audit:
    the scan covers the working tree, not past commits, so anything published

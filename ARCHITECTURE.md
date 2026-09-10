@@ -43,6 +43,7 @@ Output is a CLI report today. A dashboard is planned (see below).
 | `sources/markets.py` | Kalshi/Polymarket helper — base rates, adjustments, narrative |
 | `sources/predictions.py` | Grades uploaded positions — verdict, flags, crowd signal |
 | `sources/colleges.py` | College-to-state mapping for the homecoming narrative |
+| `sources/bios.py` | High school and hometown from Wikipedia (CC BY-SA) |
 | `sources/serve.py` | Local web server for the upload flow (localhost only) |
 | `sources/schedule.py` | Weekly schedule from nflverse — who plays whom, and the week number |
 
@@ -265,8 +266,25 @@ brings coverage to 96%; the remaining programs produce no narrative rather than
 a guessed one. It is state-level because campus coordinates are not published
 alongside roster data, and a wrong homecoming claim is worse than a missing one.
 
-**High-school narratives are not possible.** No source carries high school —
-not the roster files, not `players.csv`. Nothing was built against it.
+- **Hometown** — playing in the state where the player went to high school.
+  STRONG on a high-school match; WEAK when only a birthplace is known, since a
+  player who moved as an infant did not grow up where he was born.
+
+**On the high-school source.** This was initially recorded as impossible: no
+nflverse file carries high school. That was true of nflverse and wrong as a
+conclusion — Wikipedia's player infoboxes carry `high_school`, `birth_place`,
+and `college`, with the city attached, through a free documented API.
+
+`sources/bios.py` reads it. Two constraints shape the design:
+
+- **It is the only scraped source here**, but it is a documented public API with
+  an explicit reuse licence (CC BY-SA, attributed in the footer) — the
+  distinction that made NFL.com and X unacceptable and this acceptable.
+- **It throttles.** Fetching players one at a time returned 429 after roughly
+  twenty. Batching forty titles per request fixed that for small lookups, but
+  sweeping 457 players still got blocked. Bulk sweeps are now refused outright
+  rather than retried into a block, so hometown is a per-player lookup and is
+  excluded from the league-wide narrative scan.
 
 **`Narrative` is deliberately not a `Flag`.** A flag says something that should
 change a lineup decision; a narrative says something that makes a game worth

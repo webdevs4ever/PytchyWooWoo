@@ -77,6 +77,20 @@ NARRATIVE_LOOKBACK = int(os.environ.get("NARRATIVE_LOOKBACK", "3"))
 # How many seasons of history a market question is answered from.
 MARKET_LOOKBACK = int(os.environ.get("MARKET_LOOKBACK", "3"))
 
+# Wikipedia asks for a descriptive User-Agent and expects courteous pacing.
+# Text from there is CC BY-SA; attribution appears wherever it is used.
+WIKIPEDIA_USER_AGENT = os.environ.get(
+    "WIKIPEDIA_USER_AGENT", "fantasy-bet-helper/1.0 (personal research tool)"
+)
+WIKIPEDIA_DELAY_SECONDS = float(os.environ.get("WIKIPEDIA_DELAY", "2.0"))
+# The API accepts up to 50 titles per query; fetching one at a time gets
+# rate-limited after about twenty.
+WIKIPEDIA_BATCH_SIZE = int(os.environ.get("WIKIPEDIA_BATCH_SIZE", "40"))
+# Wikipedia throttles sustained querying even when batched, so bulk sweeps are
+# refused rather than retried into a block. Hometown narratives are therefore a
+# per-player lookup, not a league-wide scan.
+WIKIPEDIA_MAX_BATCHES = int(os.environ.get("WIKIPEDIA_MAX_BATCHES", "3"))
+
 # Strength thresholds. A one-year rental carries no grudge and a move three
 # seasons back has gone stale, so a revenge game is only strong when it is both
 # recent and earned. Tunable without touching the detection logic.

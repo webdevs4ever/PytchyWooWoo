@@ -307,6 +307,7 @@ class NarrativeKind(str, Enum):
     REVENGE = "revenge"    # facing a former team
     REUNION = "reunion"    # facing former teammates
     HOMECOMING = "homecoming"  # playing in the state where they went to college
+    HOMETOWN = "hometown"      # playing where they went to high school, or were born
 
 
 class NarrativeStrength(str, Enum):

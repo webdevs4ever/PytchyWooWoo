@@ -303,12 +303,86 @@ def find_homecoming(slate: PlayerSlate, history: RosterHistory) -> Narrative | N
     )
 
 
+def find_hometown(slate: PlayerSlate, history: RosterHistory) -> Narrative | None:
+    """A player playing where he grew up.
+
+    High school beats birthplace: a player who moved as an infant did not grow
+    up where he was born, but he did go to school where he went to school.
+    Birthplace is reported only when there is no high-school location, and is
+    graded weak accordingly.
+
+    Costs one Wikipedia request per player, so this is excluded from the
+    league-wide sweep and runs for individually analysed players instead.
+    """
+    from sources.bios import BiosUnavailable, fetch_bio
+    from sources.colleges import state_for_team
+
+    venue_state = state_for_team(slate.game.home_team)
+    if not venue_state:
+        return None
+
+    # Already playing at home is a career, not a homecoming.
+    if state_for_team(slate.player.team) == venue_state:
+        return None
+
+    try:
+        bio = fetch_bio(slate.player.name)
+    except BiosUnavailable:
+        return None
+    if bio.is_empty:
+        return None
+
+    if bio.high_school_state == venue_state:
+        where = (
+            f"{bio.high_school_city}, {venue_state}"
+            if bio.high_school_city
+            else venue_state
+        )
+        return Narrative(
+            kind=NarrativeKind.HOMETOWN,
+            headline=f"Playing in his home state — {where}",
+            detail=f"Went to high school at {bio.high_school}. "
+            f"This game is at {slate.game.home_team}.",
+            player=slate.player,
+            strength=NarrativeStrength.STRONG,
+            why=f"high school in {bio.high_school_state}; venue "
+            f"({slate.game.home_team}) is in {venue_state}",
+            rule="STRONG when the high-school location matches the venue state",
+        )
+
+    if not bio.high_school_state and bio.birth_state == venue_state:
+        return Narrative(
+            kind=NarrativeKind.HOMETOWN,
+            headline=f"Born in {venue_state}, playing there",
+            detail=f"Birthplace {bio.birth_place}. This game is at "
+            f"{slate.game.home_team}.",
+            player=slate.player,
+            strength=NarrativeStrength.WEAK,
+            why=f"born in {bio.birth_state}; no high-school location on file",
+            rule="WEAK — birthplace only; a player may not have grown up there",
+        )
+
+    return None
+
+
+# Detectors that only read cached roster history — safe to sweep the league.
 DETECTORS = [find_revenge, find_reunion, find_homecoming]
 
+# Detectors that make a network request per player. Used for individually
+# analysed players, never for the league-wide scan.
+SLOW_DETECTORS = [find_hometown]
 
-def for_slate(slate: PlayerSlate, history: RosterHistory) -> list[Narrative]:
-    """Every story about one player's matchup."""
-    found = [detector(slate, history) for detector in DETECTORS]
+
+def for_slate(
+    slate: PlayerSlate, history: RosterHistory, include_slow: bool = True
+) -> list[Narrative]:
+    """Every story about one player's matchup.
+
+    `include_slow` controls the detectors that hit Wikipedia. The league-wide
+    sweep turns it off; a single analysed player leaves it on.
+    """
+    detectors = DETECTORS + (SLOW_DETECTORS if include_slow else [])
+    found = [detector(slate, history) for detector in detectors]
     return [n for n in found if n is not None]
 
 
@@ -346,7 +420,10 @@ def scan_week(
                     continue
 
                 slate = PlayerSlate(player=player, game=game)
-                found.extend((player, n) for n in for_slate(slate, history))
+                found.extend(
+                    (player, n)
+                    for n in for_slate(slate, history, include_slow=False)
+                )
 
     # Strong before weak, then revenge before reunion.
     found.sort(key=lambda pair: (not pair[1].is_strong, pair[1].kind.value,

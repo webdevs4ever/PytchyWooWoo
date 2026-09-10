@@ -99,13 +99,23 @@ class Analysis:
 
     @property
     def has_basis(self) -> bool:
-        """False when there is no history to reason from.
-
-        The clamp in `estimate` turns an empty base rate into 2%, which reads as
-        a confident near-zero rather than the absence of an answer. Callers must
-        check this before showing a number.
-        """
+        """False when there is no history to reason from."""
         return self.games > 0
+
+    @property
+    def shows_estimate(self) -> bool:
+        """Whether a number should be printed at all.
+
+        Two cases suppress it. With no history the clamp turns an empty base
+        rate into 2%, which reads as a confident near-zero rather than the
+        absence of an answer. And anything at or below `ESTIMATE_FLOOR` is
+        suppressed by choice: a very low number invites more confidence than a
+        base rate can carry.
+
+        The verdict is unaffected — an unfavourable position still grades as
+        one, it just does not print a figure.
+        """
+        return self.has_basis and self.estimate > config.ESTIMATE_FLOOR
 
     @property
     def estimate(self) -> float:
@@ -356,8 +366,8 @@ def format_analysis(analysis: Analysis) -> str:
     lines += [
         "",
         f"  ESTIMATE    {analysis.estimate:.0f}%"
-        if analysis.has_basis
-        else "  ESTIMATE    none — no history to reason from",
+        if analysis.shows_estimate
+        else "  ESTIMATE    no estimate",
         f"  Confidence  {analysis.confidence}",
     ]
 

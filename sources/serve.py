@@ -359,10 +359,15 @@ def _render_graded(results, bad: list[str]) -> str:
     for result in results:
         analysis = result.analysis
         low, high = analysis.interval
-        if analysis.has_basis:
+        if analysis.shows_estimate:
             basis = (
                 f"{analysis.hits}/{analysis.games} games · {analysis.base_rate:.0f}% base"
                 f"<br>{low:.0f}–{high:.0f}% · est {analysis.estimate:.0f}%"
+            )
+        elif analysis.has_basis:
+            basis = (
+                f"{analysis.hits}/{analysis.games} games · {analysis.base_rate:.0f}% base"
+                f"<br>{low:.0f}–{high:.0f}% · no estimate"
             )
         else:
             basis = "no history<br>no estimate"

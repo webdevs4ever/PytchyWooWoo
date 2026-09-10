@@ -208,7 +208,12 @@ def grade(question: Question, use_conditions: bool = True) -> Graded:
         result.reasons.append(f"{estimate:.0f}% estimated, above the {GOOD_THRESHOLD:.0f}% bar")
     elif estimate <= BAD_THRESHOLD:
         result.verdict = VERDICT_BAD
-        result.reasons.append(f"{estimate:.0f}% estimated, below the {BAD_THRESHOLD:.0f}% bar")
+        result.reasons.append(
+            f"{estimate:.0f}% estimated, below the {BAD_THRESHOLD:.0f}% bar"
+            if analysis.shows_estimate
+            else f"below the {BAD_THRESHOLD:.0f}% bar — estimate suppressed under "
+            f"{config.ESTIMATE_FLOOR:.0f}%"
+        )
     else:
         result.verdict = VERDICT_UNSURE
         result.reasons.append(f"{estimate:.0f}% estimated — inside the coin-flip band")
@@ -246,7 +251,9 @@ def format_graded(results: list[Graded], bad: list[str]) -> str:
         )
         lines.append(f"  {result.markers:<4} {result.question}")
         estimate = (
-            f"estimate {analysis.estimate:.0f}%" if analysis.has_basis else "no estimate"
+            f"estimate {analysis.estimate:.0f}%"
+            if analysis.shows_estimate
+            else "no estimate"
         )
         lines.append(f"       {basis}   {estimate}")
         for reason in result.reasons:

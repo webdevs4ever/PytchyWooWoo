@@ -77,6 +77,10 @@ NARRATIVE_LOOKBACK = int(os.environ.get("NARRATIVE_LOOKBACK", "3"))
 # How many seasons of history a market question is answered from.
 MARKET_LOOKBACK = int(os.environ.get("MARKET_LOOKBACK", "3"))
 
+# Estimates at or below this are shown as "no estimate" rather than a
+# number. The clamp floor is 2%, so this also covers the no-history case.
+ESTIMATE_FLOOR = float(os.environ.get("ESTIMATE_FLOOR", "5.0"))
+
 # Wikipedia asks for a descriptive User-Agent and expects courteous pacing.
 # Text from there is CC BY-SA; attribution appears wherever it is used.
 WIKIPEDIA_USER_AGENT = os.environ.get(

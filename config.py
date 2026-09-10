@@ -60,6 +60,10 @@ NFLVERSE_INJURY_URL = (
 )
 INJURY_SEASON = int(os.environ.get("INJURY_SEASON", "0")) or None
 
+# Below this many rows, a season's injury report has not really been filed yet
+# and its silence must not be read as "nobody is hurt".
+INJURY_SPARSE_THRESHOLD = int(os.environ.get("INJURY_SPARSE_THRESHOLD", "200"))
+
 # Rosters supply jersey numbers for the dashboard and roster status for QA.
 NFLVERSE_ROSTER_URL = (
     "https://github.com/nflverse/nflverse-data/releases/download/rosters"
@@ -69,6 +73,9 @@ ROSTER_SEASON = int(os.environ.get("ROSTER_SEASON", "0")) or None
 # How many seasons of roster history Narrative Street diffs. Three covers the
 # useful window: older stints stop reading as a grudge.
 NARRATIVE_LOOKBACK = int(os.environ.get("NARRATIVE_LOOKBACK", "3"))
+
+# How many seasons of history a market question is answered from.
+MARKET_LOOKBACK = int(os.environ.get("MARKET_LOOKBACK", "3"))
 
 # Strength thresholds. A one-year rental carries no grudge and a move three
 # seasons back has gone stale, so a revenge game is only strong when it is both

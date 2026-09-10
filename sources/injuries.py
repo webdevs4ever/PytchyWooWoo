@@ -133,6 +133,18 @@ class InjuryReport:
     def __len__(self) -> int:
         return len(self._by_key)
 
+    @property
+    def is_sparse(self) -> bool:
+        """True when the report exists but has barely been filed.
+
+        A newly published season's file appears days before the first
+        designations land. Falling back to the prior season would be worse —
+        a week 18 designation says nothing about week 1 — so the honest
+        response is to report the emptiness rather than hide it behind a stale
+        answer or a silent None.
+        """
+        return len(self._by_key) < config.INJURY_SPARSE_THRESHOLD
+
 
 _REPORT: InjuryReport | None = None
 

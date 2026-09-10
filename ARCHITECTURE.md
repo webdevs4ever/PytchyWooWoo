@@ -40,6 +40,7 @@ Output is a CLI report today. A dashboard is planned (see below).
 | `sources/rosters.py` | Jersey numbers and roster status from nflverse — **implemented** |
 | `sources/narratives.py` | Narrative Street — revenge games and reunions from roster history |
 | `sources/comp.py` | Comp Mode — optimizer, upload parser, diff, and decision markers |
+| `sources/markets.py` | Kalshi/Polymarket helper — base rates, adjustments, narrative |
 | `sources/serve.py` | Local web server for the upload flow (localhost only) |
 | `sources/schedule.py` | Weekly schedule from nflverse — who plays whom, and the week number |
 
@@ -287,6 +288,37 @@ results.
   between sessions, and where the cartoon art comes from — that is a
   commissioned asset problem, not a code one, and it defines the feature's look
   more than any of the logic does.
+
+## Prediction-market helper
+
+`python -m sources.markets "Amon-Ra St. Brown" receiving_yards 70.5`
+
+Answers a market question with three things, per the spec:
+
+1. **Historical analysis** over three seasons of nflverse weekly stats.
+2. **A percentage.**
+3. **A Narrative Street flag** where one applies.
+
+**What the percentage is.** The share of that player's past games meeting the
+threshold, shifted for observable conditions — injury designation, matchup
+split, wind, precipitation. It is a base rate, not a forecast. It carries no
+information the market lacks, and cannot see usage changes, game script, or
+anything reported since the last refresh. Every result prints that caveat.
+
+**Every result carries a Wilson 95% interval**, because 67% from three games and
+67% from forty are different claims and only the interval says so. The estimate
+is clamped to 2–98%: football offers no certainties, and a confident extreme
+from a small sample is the most misleading output this module could produce.
+
+**Data availability, checked rather than assumed:**
+
+- *nflverse* — the substance. Three seasons are available, but they are
+  2022–2024: `player_stats_2025` is not published under any name. The 2025
+  season exists only as raw play-by-play, which would need aggregating.
+- *Sleeper* — free and reachable, no key. Useful for current-state context
+  rather than history.
+- *BALLDONTLIE* — returns 401 without an API key. Not wired up; supply a key if
+  you want it.
 
 ## Planned: Comps Mode
 
@@ -552,5 +584,11 @@ contract, so a redesign touches `dashboard.py` only.
   carries a stadium name but no lat/lon, so a neutral-site game falls back to
   the listed home venue. Harmless while such games are roofed (weather is
   skipped), wrong if an outdoor one appears.
+- **A newly published injury report reads as clean.** The file for a season
+  appears days before designations are filed — the 2026 report had 11 rows for
+  the whole league during week 1. Falling back to the prior season would be
+  worse, since a week 18 designation says nothing about week 1, so the emptiness
+  is surfaced instead: `env.injury_report_sparse` in QA, and an explicit note in
+  any market analysis. Absence of a designation is not evidence of health.
 - **Salary exports are manual.** Someone has to download the weekly CSVs into
   `salaries/`. Without them there are no value flags.

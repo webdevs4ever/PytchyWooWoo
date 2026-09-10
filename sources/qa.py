@@ -863,6 +863,24 @@ def check_environment() -> list[Issue]:
             )
         )
 
+    try:
+        from sources.injuries import get_report
+
+        report = get_report()
+        if report.is_sparse:
+            issues.append(
+                Issue(
+                    IssueLevel.WARNING,
+                    "env.injury_report_sparse",
+                    f"the {report.season} injury report has only {len(report)} rows — "
+                    "designations are not filed yet, so every injury check will "
+                    "report clean regardless of who is hurt",
+                    "config",
+                )
+            )
+    except Exception:
+        pass
+
     if not config.ODDS_API_KEY:
         issues.append(
             Issue(

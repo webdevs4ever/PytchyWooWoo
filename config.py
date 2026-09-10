@@ -92,6 +92,12 @@ CACHE_DIR = Path(os.environ.get("FBH_CACHE_DIR", ".cache"))
 
 # --- Flagging thresholds ----------------------------------------------------
 
+# Which positions each condition actually affects. Wind degrades the throwing
+# and kicking game; rain is a ball-security and footing problem, which lands on
+# the players carrying and catching it.
+WIND_AFFECTED_POSITIONS = ("QB", "K")
+RAIN_AFFECTED_POSITIONS = ("WR", "RB", "TE")
+
 WIND_WARNING_MPH = 15.0       # kicking and deep passing start degrading here
 WIND_CRITICAL_MPH = 22.0
 PRECIP_WARNING_CHANCE = 0.50  # 0.0-1.0

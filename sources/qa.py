@@ -592,6 +592,12 @@ def _weather_scenarios() -> list[tuple[str, object, object, set[str]]]:
             {"weather.wind"},
         ),
         (
+            "wind at the warning threshold, on a quarterback",
+            W(60, warn_wind, 0.0, "Windy"),
+            P.QB,
+            {"weather.wind"},
+        ),
+        (
             "wind below the threshold",
             W(60, warn_wind - 1, 0.0, "Breezy"),
             P.K,
@@ -610,7 +616,7 @@ def _weather_scenarios() -> list[tuple[str, object, object, set[str]]]:
             set(),
         ),
         (
-            "precipitation above the threshold",
+            "precipitation above the threshold, on a runner",
             W(55, 5, config.PRECIP_WARNING_CHANCE, "Rain"),
             P.RB,
             {"weather.precipitation"},
@@ -628,10 +634,36 @@ def _weather_scenarios() -> list[tuple[str, object, object, set[str]]]:
             {"weather.heat"},
         ),
         (
-            "wind and rain together",
+            "wind and rain together, on a QB",
+            W(50, crit_wind, 0.9, "Storm"),
+            P.QB,
+            # A QB feels the wind; rain is scoped to the players carrying and
+            # catching the ball, so it does not flag here.
+            {"weather.wind"},
+        ),
+        (
+            "wind and rain together, on a WR",
             W(50, crit_wind, 0.9, "Storm"),
             P.WR,
-            {"weather.wind", "weather.precipitation"},
+            {"weather.precipitation"},
+        ),
+        (
+            "high wind on a receiver",
+            W(60, crit_wind, 0.0, "Very windy"),
+            P.WR,
+            set(),
+        ),
+        (
+            "heavy rain on a quarterback",
+            W(55, 5, 0.9, "Rain"),
+            P.QB,
+            set(),
+        ),
+        (
+            "heavy rain on a kicker",
+            W(55, 5, 0.9, "Rain"),
+            P.K,
+            set(),
         ),
     ]
 

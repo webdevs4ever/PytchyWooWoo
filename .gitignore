@@ -22,3 +22,7 @@ dashboard.html
 # Weekly lineups (week-specific)
 lineups/*.txt
 lineups/*.csv
+
+# Weekly predictions (week-specific)
+predictions/*.txt
+predictions/*.csv

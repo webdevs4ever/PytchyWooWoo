@@ -306,6 +306,7 @@ class RosterEntry:
 class NarrativeKind(str, Enum):
     REVENGE = "revenge"    # facing a former team
     REUNION = "reunion"    # facing former teammates
+    HOMECOMING = "homecoming"  # playing in the state where they went to college
 
 
 class NarrativeStrength(str, Enum):

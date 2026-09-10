@@ -98,6 +98,16 @@ class Analysis:
         return 100.0 * self.hits / self.games if self.games else 0.0
 
     @property
+    def has_basis(self) -> bool:
+        """False when there is no history to reason from.
+
+        The clamp in `estimate` turns an empty base rate into 2%, which reads as
+        a confident near-zero rather than the absence of an answer. Callers must
+        check this before showing a number.
+        """
+        return self.games > 0
+
+    @property
     def estimate(self) -> float:
         """Base rate after adjustments, clamped to a sane range.
 
@@ -345,7 +355,9 @@ def format_analysis(analysis: Analysis) -> str:
 
     lines += [
         "",
-        f"  ESTIMATE    {analysis.estimate:.0f}%",
+        f"  ESTIMATE    {analysis.estimate:.0f}%"
+        if analysis.has_basis
+        else "  ESTIMATE    none — no history to reason from",
         f"  Confidence  {analysis.confidence}",
     ]
 

@@ -42,8 +42,8 @@ from sources.comp import (
 )
 
 NAV = (
-    '<p class="nav"><a href="/">Analyze</a><a href="/admin">Admin</a>'
-    '<span class="build">build {build}</span></p>'
+    '<p class="nav"><a href="/">Analyze</a><a href="/predictions">Predictions</a>'
+    '<a href="/admin">Admin</a><span class="build">build {build}</span></p>'
 )
 
 def _build_stamp() -> str:
@@ -167,6 +167,23 @@ th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.09em
 td{padding:8px 10px;border-bottom:1px solid var(--edge)}
 .scope{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;
   color:var(--gold)}
+.pred{padding:16px 18px;border-top:1px solid var(--edge)}
+.pred:first-of-type{border-top:0}
+.pred-head{display:flex;align-items:baseline;gap:12px}
+.verdict{font-size:19px;line-height:1}
+.verdict[data-v=good]{color:var(--ok)}
+.verdict[data-v=unsure]{color:var(--warn)}
+.verdict[data-v=bad]{color:var(--bad)}
+.pred-q{font-weight:700;font-size:14px}
+.pred-basis{margin-left:auto;font-size:11.5px;color:var(--muted);
+  font-variant-numeric:tabular-nums;text-align:right}
+.pred ul{margin:8px 0 0;padding-left:18px;font-size:11.5px;color:var(--muted);
+  line-height:1.6}
+.pred .wx{color:var(--sev-info)}
+.pred .story{margin-top:9px}
+.tally{display:flex;gap:18px;margin-top:18px;font-size:12px;
+  text-transform:uppercase;letter-spacing:0.09em;color:var(--muted)}
+.tally b{font-size:16px;font-variant-numeric:tabular-nums}
 """
 
 
@@ -174,6 +191,11 @@ COMP_HEADING = (
     '<h1>Comp<span> Mode</span></h1>'
     '<p class="sub">Upload a lineup. The decisioning engine marks each player, '
     "then compares your lineup against the optimal one.</p>"
+)
+PREDICTIONS_HEADING = (
+    '<h1>Predi<span>ctions</span></h1>'
+    '<p class="sub">Upload your Kalshi or Polymarket positions. Each is graded '
+    "against three seasons of history, with narrative and weather flags.</p>"
 )
 ADMIN_HEADING = (
     '<h1>Admin<span> Console</span></h1>'
@@ -310,6 +332,90 @@ def _render_result(comparison, user_marked, optimal_marked, rules) -> str:
             "<p>Your lineup is already optimal.</p></section>"
         )
 
+    return "".join(parts)
+
+
+# --- Predictions ------------------------------------------------------------
+
+
+def _predictions_form(message: str = "") -> str:
+    return f"""{message}
+<form method="post" action="/predictions" enctype="multipart/form-data">
+  <div><label for="pfile">Predictions file</label>
+    <input type="file" id="pfile" name="file" accept=".txt,.csv"></div>
+  <div><label for="ptext">…or paste them, one per line</label>
+    <textarea id="ptext" name="text"
+      placeholder="Amon-Ra St. Brown over 70.5 receiving_yards&#10;Josh Allen over 245.5 passing_yards"></textarea></div>
+  <button type="submit">Grade predictions</button>
+</form>"""
+
+
+def _render_graded(results, bad: list[str]) -> str:
+    from sources.predictions import VERDICT_BAD, VERDICT_GOOD, VERDICT_UNSURE
+
+    tone = {VERDICT_GOOD: "good", VERDICT_UNSURE: "unsure", VERDICT_BAD: "bad"}
+    rows = []
+
+    for result in results:
+        analysis = result.analysis
+        low, high = analysis.interval
+        if analysis.has_basis:
+            basis = (
+                f"{analysis.hits}/{analysis.games} games · {analysis.base_rate:.0f}% base"
+                f"<br>{low:.0f}–{high:.0f}% · est {analysis.estimate:.0f}%"
+            )
+        else:
+            basis = "no history<br>no estimate"
+
+        bullets = "".join(f"<li>{html.escape(r)}</li>" for r in result.reasons)
+        bullets += "".join(
+            f'<li class="wx">{html.escape(f)}</li>' for f in result.weather_flags
+        )
+        if result.crowd and analysis.has_basis:
+            bullets += f"<li>{html.escape(result.crowd)}</li>"
+
+        story = ""
+        if result.narrative:
+            n = result.narrative
+            story = (
+                f'<div class="story"><span class="story-kind">'
+                f"{html.escape(n.kind.value)} · {html.escape(n.strength.value)}</span>"
+                f'<div class="story-head">{html.escape(n.headline)}</div>'
+                f'<div class="story-detail">{html.escape(n.detail)}</div></div>'
+            )
+
+        rows.append(
+            f'<div class="pred"><div class="pred-head">'
+            f'<span class="verdict" data-v="{tone.get(result.verdict, "unsure")}">'
+            f"{result.markers}</span>"
+            f'<span class="pred-q">{html.escape(str(result.question))}</span>'
+            f'<span class="pred-basis">{basis}</span></div>'
+            f"<ul>{bullets}</ul>{story}</div>"
+        )
+
+    good = sum(1 for r in results if r.verdict == VERDICT_GOOD)
+    unsure = sum(1 for r in results if r.verdict == VERDICT_UNSURE)
+    poor = sum(1 for r in results if r.verdict == VERDICT_BAD)
+
+    parts = [
+        f'<section class="card" style="--card-accent:var(--brand)">'
+        f"<h2>Graded</h2>{''.join(rows)}</section>",
+        f'<p class="tally"><span>{VERDICT_GOOD} favourable <b>{good}</b></span>'
+        f"<span>{VERDICT_UNSURE} unclear <b>{unsure}</b></span>"
+        f"<span>{VERDICT_BAD} unfavourable <b>{poor}</b></span></p>",
+    ]
+    if bad:
+        parts.append(
+            '<div class="err"><b>Could not parse:</b> '
+            + html.escape("; ".join(bad))
+            + "</div>"
+        )
+    parts.append(
+        '<p class="colophon">Grades are historical base rates adjusted for '
+        "observable conditions — not forecasts, and carrying no information the "
+        "market lacks. Crowd signal is Sleeper adds, which is fantasy-manager "
+        "behaviour rather than analyst opinion.</p>"
+    )
     return "".join(parts)
 
 
@@ -510,6 +616,9 @@ class Handler(BaseHTTPRequestHandler):
         if self.path in ("/admin", "/admin/"):
             self._send(_page(_admin_form(), ADMIN_HEADING))
             return
+        if self.path in ("/predictions", "/predictions/"):
+            self._send(_page(_predictions_form(), PREDICTIONS_HEADING))
+            return
         if self.path not in ("/", "/index.html"):
             self._send(_page('<div class="err">Not found.</div>'), 404)
             return
@@ -519,6 +628,21 @@ class Handler(BaseHTTPRequestHandler):
         if self.path in ("/admin", "/admin/"):
             message = _apply_admin(_parse_body(self))
             self._send(_page(_admin_form(message), ADMIN_HEADING))
+            return
+        if self.path in ("/predictions", "/predictions/"):
+            from sources.predictions import grade_all, parse
+
+            fields = _parse_body(self)
+            text = fields.get("file") or fields.get("text") or ""
+            questions, bad = parse(text)
+            if not questions:
+                body = _predictions_form(
+                    '<div class="err">No predictions parsed. Format: '
+                    "<code>Player over 70.5 receiving_yards</code></div>"
+                )
+            else:
+                body = _predictions_form() + _render_graded(grade_all(questions), bad)
+            self._send(_page(body, PREDICTIONS_HEADING))
             return
         if self.path != "/analyze":
             self._send(_page('<div class="err">Not found.</div>'), 404)
@@ -581,6 +705,7 @@ def main(argv: list[str] | None = None) -> int:
 
     server = HTTPServer((HOST, args.port), Handler)
     print(f"Comp Mode     http://{HOST}:{args.port}")
+    print(f"Predictions   http://{HOST}:{args.port}/predictions")
     print(f"Admin console http://{HOST}:{args.port}/admin")
     print("(ctrl-c to stop)")
     try:

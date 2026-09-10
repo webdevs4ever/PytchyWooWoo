@@ -15,8 +15,10 @@ from typing import Callable
 import config
 from models import Flag, Platform, PlayerSlate, Position, Severity
 
-# Positions whose production depends most on conditions.
-WIND_SENSITIVE = {Position.K, Position.QB, Position.WR, Position.TE}
+# Conditions do not affect every position equally: wind degrades throwing and
+# kicking, rain is a ball-security problem for whoever is carrying or catching.
+WIND_SENSITIVE = {Position(p) for p in config.WIND_AFFECTED_POSITIONS}
+RAIN_SENSITIVE = {Position(p) for p in config.RAIN_AFFECTED_POSITIONS}
 
 
 def check_weather(slate: PlayerSlate) -> list[Flag]:
@@ -46,13 +48,17 @@ def check_weather(slate: PlayerSlate) -> list[Flag]:
             )
         )
 
-    if weather.precipitation_chance >= config.PRECIP_WARNING_CHANCE:
+    if (
+        weather.precipitation_chance >= config.PRECIP_WARNING_CHANCE
+        and slate.player.position in RAIN_SENSITIVE
+    ):
         flags.append(
             Flag(
                 code="weather.precipitation",
                 severity=Severity.WARNING,
                 reason=f"{weather.precipitation_chance:.0%} chance of precipitation "
-                f"({weather.description})",
+                f"({weather.description}) — ball security for "
+                f"{slate.player.position.value}s",
                 player=slate.player,
                 game=slate.game,
             )

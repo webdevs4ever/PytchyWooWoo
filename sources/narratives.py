@@ -62,6 +62,8 @@ class RosterHistory:
         self._names: dict[str, str] = {}
         # player key -> position, from their most recent stint
         self._positions: dict[str, str] = {}
+        # player key -> college, for the homecoming narrative
+        self._colleges: dict[str, str] = {}
         self._build()
 
     @staticmethod
@@ -86,6 +88,9 @@ class RosterHistory:
 
                 self._names.setdefault(key, name)
                 self._positions.setdefault(key, (row.get("position") or "").strip().upper())
+                college = (row.get("college") or "").strip()
+                if college:
+                    self._colleges.setdefault(key, college)
                 self._stints.setdefault(key, {})[season] = team
                 self._squads.setdefault(season, {}).setdefault(team, set()).add(key)
             loaded += 1
@@ -134,6 +139,9 @@ class RosterHistory:
 
     def position(self, key: str) -> str:
         return self._positions.get(key, "")
+
+    def college(self, key: str) -> str:
+        return self._colleges.get(key, "")
 
     def skill_players(self, keys: set[str]) -> set[str]:
         """Narrow a set of players to fantasy-relevant positions.
@@ -252,7 +260,50 @@ def find_reunion(
     )
 
 
-DETECTORS = [find_revenge, find_reunion]
+def find_homecoming(slate: PlayerSlate, history: RosterHistory) -> Narrative | None:
+    """A player playing in the state where he went to college.
+
+    State-level, not city-level: campus coordinates are not published alongside
+    roster data, and a wrong homecoming claim is worse than a missing one. An
+    unmapped program produces nothing — the mapping covers 96% of active skill
+    players, and the remainder stay silent.
+
+    Only counts at the home venue, since that is where the crowd would be.
+    """
+    from sources.colleges import resolve_college, state_for_team
+    from sources.odds import strict_name
+
+    key = strict_name(slate.player.name)
+    resolved = resolve_college(history.college(key))
+    if resolved is None:
+        return None
+
+    program, college_state = resolved
+    venue_state = state_for_team(slate.game.home_team)
+    if not venue_state or college_state != venue_state:
+        return None
+
+    # Playing for the home team in your college state is just a career, not a
+    # homecoming. The story is the visit.
+    if slate.player.team.upper() == slate.game.home_team.upper():
+        return None
+
+    strong = state_for_team(slate.player.team) != college_state
+
+    return Narrative(
+        kind=NarrativeKind.HOMECOMING,
+        headline=f"Returns to {college_state} — played at {program}",
+        detail=f"College was {program} ({college_state}); this game is at "
+        f"{slate.game.home_team}, in the same state.",
+        player=slate.player,
+        strength=(NarrativeStrength.STRONG if strong else NarrativeStrength.WEAK),
+        why=f"college {program} is in {college_state}; venue "
+        f"({slate.game.home_team}) is in {venue_state}",
+        rule="STRONG when the player's current team is not already in that state",
+    )
+
+
+DETECTORS = [find_revenge, find_reunion, find_homecoming]
 
 
 def for_slate(slate: PlayerSlate, history: RosterHistory) -> list[Narrative]:

@@ -41,6 +41,8 @@ Output is a CLI report today. A dashboard is planned (see below).
 | `sources/narratives.py` | Narrative Street — revenge games and reunions from roster history |
 | `sources/comp.py` | Comp Mode — optimizer, upload parser, diff, and decision markers |
 | `sources/markets.py` | Kalshi/Polymarket helper — base rates, adjustments, narrative |
+| `sources/predictions.py` | Grades uploaded positions — verdict, flags, crowd signal |
+| `sources/colleges.py` | College-to-state mapping for the homecoming narrative |
 | `sources/serve.py` | Local web server for the upload flow (localhost only) |
 | `sources/schedule.py` | Weekly schedule from nflverse — who plays whom, and the week number |
 
@@ -253,6 +255,18 @@ Thresholds live in `config.py`:
   seasons. A one-year rental carries no grudge; a three-year-old move has gone
   stale.
 - **Reunion** — STRONG at 3+ skill-position former teammates, WEAK at 2.
+- **Homecoming** — playing in the state where the player went to college.
+  STRONG when their current team is not already in that state.
+
+The homecoming mapping in `sources/colleges.py` is curated and deliberately
+partial: 267 distinct colleges appear among active skill players. Handling
+transfer records (`"Missouri; Truman State University"`) and naming variants
+brings coverage to 96%; the remaining programs produce no narrative rather than
+a guessed one. It is state-level because campus coordinates are not published
+alongside roster data, and a wrong homecoming claim is worse than a missing one.
+
+**High-school narratives are not possible.** No source carries high school —
+not the roster files, not `players.csv`. Nothing was built against it.
 
 **`Narrative` is deliberately not a `Flag`.** A flag says something that should
 change a lineup decision; a narrative says something that makes a game worth
@@ -288,6 +302,33 @@ results.
   between sessions, and where the cartoon art comes from — that is a
   commissioned asset problem, not a code one, and it defines the feature's look
   more than any of the logic does.
+
+## Predictions
+
+Upload positions at `/predictions`, or grade them from the terminal:
+
+    python -m sources.predictions predictions/week1.txt
+
+Each gets a verdict — `✓` favourable, `?` unclear, `✕` unfavourable — plus a
+`📣` where a narrative applies, weather flags scoped to the affected positions,
+and the reasoning behind the grade.
+
+**Weather is position-scoped.** Wind degrades throwing and kicking, so it flags
+QBs and kickers. Rain is a ball-security and footing problem, so it flags
+receivers, backs, and tight ends. A receiver in high wind and a quarterback in
+heavy rain both flag nothing, which the QA scenario suite asserts explicitly.
+
+**On "positive feedback from other analysts".** No free analyst-consensus source
+exists. What is wired is Sleeper's trending adds — how many fantasy managers
+added a player in 24 hours — which is crowd behaviour, not analyst opinion, and
+is labelled that way everywhere it appears. Sleeper's projections endpoint is
+reachable but returns empty for unplayed weeks.
+
+**A prediction with no history never grades green.** The best it earns is `?`
+with the crowd signal noted. "Lots of people added him" is not evidence a line
+will clear, and an empty base rate must not be dressed up as a confident answer —
+`Analysis.has_basis` exists so callers cannot print the clamped 2% as though it
+meant something.
 
 ## Prediction-market helper
 

@@ -70,6 +70,17 @@ def _build_stamp() -> str:
 
 BUILD = _build_stamp()
 
+FAVICON = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">'
+    '<rect width="32" height="32" fill="#0a0a0c"/>'
+    '<ellipse cx="16" cy="16" rx="12" ry="7.5" transform="rotate(-30 16 16)" '
+    'fill="#8a4b2a" stroke="#f0522c" stroke-width="1.6"/>'
+    '<path d="M11 21 L21 11" stroke="#f4f2ef" stroke-width="1.4"/>'
+    '<path d="M13.2 17.4 L15.2 19.4 M15.2 15.4 L17.2 17.4 M17.2 13.4 L19.2 15.4" '
+    'stroke="#f4f2ef" stroke-width="1.2"/>'
+    "</svg>"
+).encode("utf-8")
+
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 
@@ -207,6 +218,7 @@ ADMIN_HEADING = (
 def _page(body: str, heading: str = COMP_HEADING) -> bytes:
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <title>Fantasy Bet Helper</title><style>{CSS}</style></head><body>
 <div class="shell">
 {heading}
@@ -618,6 +630,20 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(payload)
 
     def do_GET(self) -> None:  # noqa: N802
+        if self.path == "/favicon.svg":
+            self.send_response(200)
+            self.send_header("Content-Type", "image/svg+xml")
+            self.send_header("Content-Length", str(len(FAVICON)))
+            self.end_headers()
+            self.wfile.write(FAVICON)
+            return
+        if self.path in ("/favicon.ico", "/apple-touch-icon.png",
+                         "/apple-touch-icon-precomposed.png"):
+            # Browsers request these unprompted. 204 answers without a body and
+            # keeps the console clean.
+            self.send_response(204)
+            self.end_headers()
+            return
         if self.path in ("/admin", "/admin/"):
             self._send(_page(_admin_form(), ADMIN_HEADING))
             return
